@@ -1,1 +1,10 @@
 /Manifest.toml
+**/wfc*
+**/UNK*
+**/output/**
+**/*.xml
+**/*.nnkp
+**/*.chk
+**/cmd.sh
+**/.ipynb_checkpoints
+**/*.dat

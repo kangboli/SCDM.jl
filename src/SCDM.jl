@@ -1,5 +1,9 @@
 module SCDM
 
-# Write your package code here.
+using WTP
+using LinearAlgebra
+using ProgressMeter
+
+include("Vanilla.jl")
 
 end
