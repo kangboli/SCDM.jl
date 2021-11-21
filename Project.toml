@@ -11,6 +11,7 @@ ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 WTP = "7f2d596f-d764-40ee-883d-fa5ff5538bc6"
 
 [compat]
+IJulia = "1"
 julia = "1"
 
 [extras]
