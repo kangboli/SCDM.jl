@@ -13,13 +13,11 @@ function scdm_condense_phase(wannier::Wannier{UnkBasisOrbital{T}}, bands::Abstra
 
     vectorize(o::UnkBasisOrbital{T}) = reshape(elements(o), prod(size(grid(o))))
 
-    Ψ_Γ = hcat(vectorize.(wannier[gamma_point][bands])...)
-
-    F = qr(Ψ_Γ', Val(true))
-    permutation = F.p
-
-    columns = permutation[1:length(bands)]
-    # println(columns)
+    columns = begin
+        Ψ_Γ = hcat(vectorize.(wannier[gamma_point][bands])...)
+        F = qr(Ψ_Γ', ColumnNorm())
+        F.p[1:length(bands)]
+    end
 
     n_bands_complete = length(elements(wannier)[1])
     U = Gauge(brillouin_zone, n_bands_complete)
@@ -28,10 +26,9 @@ function scdm_condense_phase(wannier::Wannier{UnkBasisOrbital{T}}, bands::Abstra
         U * adjoint(V)
     end
 
-    @showprogress for k in collect(brillouin_zone)
+    for k in collect(brillouin_zone)
         phase = (r->exp(1im * (r' * k))).(homecell(columns))
         Ψ = hcat(vectorize.(wannier[k][bands])...)
-
         Ψ = diagm(phase) * Ψ[columns, :]
         Ψ = Ψ'
 
@@ -40,13 +37,3 @@ function scdm_condense_phase(wannier::Wannier{UnkBasisOrbital{T}}, bands::Abstra
 
     return U
 end
-
-
-        # if (k == brillouin_zone[0,0,1])
-        #     for c in columns
-        #         println("Real", coefficients(homecell[c]))
-        #         println("Real", coefficients(homecell[c])./size(homecell))
-        #     end
-        #     # println([(homecell[c]' * k) / (2 * pi) for c in columns]) 
-        #     # println(phase)
-        # end
