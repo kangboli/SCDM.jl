@@ -25,14 +25,18 @@ function scdm_condense_phase(u::Wannier{UnkBasisOrbital{T}}, bands::AbstractVect
         U * adjoint(V)
     end
 
+    function normalize(A::AbstractMatrix) 
+        return hcat([c / norm(c) for c in eachcol(A)]...)
+    end
+
     for k in collect(brillouin_zone)
         phase = (r->exp(1im * (k' * r))).(homecell(columns))
         Ψ = hcat(vectorize.(u[k][bands])...)
         Ψ = diagm(phase) * Ψ[columns, :]
         Ψ = Ψ'
 
-        U[k][bands, bands] = ortho ? orthonormalize(Ψ) : Ψ
+        U[k][bands, bands] = ortho ? orthonormalize(Ψ) : normalize(Ψ)
     end
 
-    return U
+    return U, columns
 end
