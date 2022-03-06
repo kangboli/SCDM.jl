@@ -1,0 +1,11 @@
+&inputpp
+  outdir     =  './'
+  prefix     =  'si'
+  seedname   =  'si'
+  spin_component = 'none'
+  write_amn  =  .true.
+  write_mmn  =  .true.
+  write_unkg     = .false.
+  write_unk  = .true.
+  wvfn_formatted = .true.
+/
