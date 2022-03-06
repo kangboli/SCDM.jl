@@ -1,7 +1,6 @@
 /Manifest.toml
 **/wfc*
 **/UNK*
-**/output/**
 **/*.xml
 **/*.nnkp
 **/*.chk

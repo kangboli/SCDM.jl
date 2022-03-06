@@ -1,0 +1,160 @@
+
+     Program PW2WANNIER v.6.8 starts on 13Nov2021 at 16: 0:35 
+
+     This program is part of the open-source Quantum ESPRESSO suite
+     for quantum simulation of materials; please cite
+         "P. Giannozzi et al., J. Phys.:Condens. Matter 21 395502 (2009);
+         "P. Giannozzi et al., J. Phys.:Condens. Matter 29 465901 (2017);
+         "P. Giannozzi et al., J. Chem. Phys. 152 154105 (2020);
+          URL http://www.quantum-espresso.org", 
+     in publications or presentations arising from this work. More details at
+     http://www.quantum-espresso.org/quote
+
+     Parallel version (MPI), running on     1 processors
+
+     MPI processes distributed on     1 nodes
+     21528 MiB available memory on the printing compute node when the environment starts
+
+
+  Reading nscf_save data
+
+     Reading xml data from directory:
+
+     ./benzene.save/
+
+     IMPORTANT: XC functional enforced from input :
+     Exchange-correlation= PBE
+                           (   1   4   3   4   0   0   0)
+     Any further DFT definition will be discarded
+     Please, verify this is what you really want
+
+
+     G-vector sticks info
+     --------------------
+     sticks:   dense  smooth     PW     G-vecs:    dense   smooth      PW
+     Sum       17165    8585   2145              1694695   599161   74773
+
+     Using Slab Decomposition
+
+     Reading collected, re-writing distributed wavefunctions
+
+  Spin CASE ( default = unpolarized )
+
+  Wannier mode is: standalone     
+
+  -----------------
+  *** Reading nnkp 
+  -----------------
+
+  Checking info from wannier.nnkp file
+
+  - Real lattice is ok
+  - Reciprocal lattice is ok
+  - K-points are ok
+  - Number of wannier functions is ok ( 15)
+  - All guiding functions are given 
+
+ Projections:
+    0.500510    0.178760    0.782480  0  1  1    1.000000
+    0.853570    0.105500    0.711470  0  1  1    1.000000
+    0.289680    0.331210    0.312270  0  1  1    1.000000
+    0.120930    0.034590    0.065800  0  1  1    1.000000
+    0.404200    0.400960    0.261000  0  1  1    1.000000
+    0.088000    0.960310    0.305920  0  1  1    1.000000
+    0.797960    0.664430    0.788460  0  1  1    1.000000
+    0.174650    0.994580    0.314240  0  1  1    1.000000
+    0.939330    0.950200    0.946940  0  1  1    1.000000
+    0.414340    0.058320    0.375710  0  1  1    1.000000
+    0.690210    0.491590    0.626060  0  1  1    1.000000
+    0.853010    0.956380    0.240210  0  1  1    1.000000
+    0.085010    0.154650    0.013560  0  1  1    1.000000
+    0.110270    0.629800    0.107700  0  1  1    1.000000
+    0.804620    0.915550    0.525090  0  1  1    1.000000
+
+  Reading data about k-point neighbours 
+
+  All neighbours are found 
+
+  Opening pp-files 
+
+
+  --------------------------
+  *** Compute  A projections
+  --------------------------
+
+  AMN: iknum =        1
+       1
+
+  AMN calculated
+
+  ---------------
+  *** Compute  M 
+  ---------------
+
+  MMN: iknum =        1
+       1 nwordwfc:       560805
+ npw:        37387
+ aux2 - aux1:  (-8.81993818325005202E-002,-6.23139924401422038E-004)
+ aux * evc:            (-0.54065459707099472,-0.24202272079083192)
+ aux2 * evc:            (-0.30764439419346362,-0.13771636243846447)
+ aux2 * aux2:              (0.24891795678153239,-0.0000000000000000)
+ Mkb:            (-0.84829899126445829,-0.37973908322929639)
+ aux2 - aux1:   (-9.76432418212649367E-002,1.84577734558459636E-008)
+ aux * evc:        (-0.50471870237382832,3.03763779565741904E-006)
+ aux2 * evc:        (-0.42472170527977426,2.70284498114216155E-006)
+ aux2 * aux2:              (0.42565125579120483,-0.0000000000000000)
+ Mkb:        (-0.92944040765360258,5.74048277679958017E-006)
+ aux2 - aux1:       (-0.10155408141192092,-9.67469895003596723E-009)
+ aux * evc:        (-0.50338374641379047,3.06039203803441429E-007)
+ aux2 * evc:        (-0.47949784196177242,3.04020743933858947E-007)
+ aux2 * aux2:              (0.48232975548735590,-0.0000000000000000)
+ Mkb:        (-0.98288158837556283,6.10059947737300429E-007)
+
+
+  MMN calculated
+
+  -----------------------------------
+  *** Orbital terms are not computed 
+  -----------------------------------
+
+  -----------------------------------
+  *** SHC terms are not computed 
+  -----------------------------------
+
+  ----------------
+  *** Write bands 
+  ----------------
+
+
+  --------------------
+  *** Write plot info 
+  --------------------
+
+ UNK: iknum =        1
+       1
+
+  UNK written
+
+  -----------------------------
+  *** Parity info is not printed 
+  -----------------------------
+
+  ------------
+  *** Stop pp 
+  ------------
+
+
+     init_pw2wan  :      0.93s CPU      1.12s WALL (       1 calls)
+     compute_amn  :      9.00s CPU      9.00s WALL (       1 calls)
+     compute_mmn  :      1.34s CPU      1.36s WALL (       1 calls)
+     write_unk    :     20.75s CPU     21.43s WALL (       1 calls)
+
+     PW2WANNIER   :     32.02s CPU     32.91s WALL
+
+
+   This run was terminated on:  16: 1: 8  13Nov2021            
+
+=------------------------------------------------------------------------------=
+   JOB DONE.
+=------------------------------------------------------------------------------=
+
