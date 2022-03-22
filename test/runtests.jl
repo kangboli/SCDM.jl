@@ -3,7 +3,7 @@ using Test
 
 
 currrent_dir = pwd()
-test_dir = endswith(currrent_dir, "SCDM") ? joinpath(currrent_dir, "test") : currrent_dir
+test_dir = endswith(currrent_dir, "SCDM.jl") ? joinpath(currrent_dir, "test") : currrent_dir
 test_1_dir = "$(test_dir)/test_data/test_1"
 test_2_dir = "$(test_dir)/test_data/test_2"
 test_3_dir = "$(test_dir)/test_data/test_3"

@@ -1,5 +1,29 @@
 export ILAOptimizer, FletcherReeves, logger, AcceleratedGradientDescent
 
+"""
+A three-points fitting method for conjugate gradient.
+
+f(λ) ≈ a (λ - b)² + c around λ = 1
+f(λ) ≈ a λ² - 2ab λ + b² + c
+
+| 0  0  1 | | a      | = | f(0) |
+| 1  1  1 | | -2ab   |   | f(1) |
+| 4  2  1 | | b² + c |   | f(2) |
+
+```julia
+quadratic_fit_1d(x->2(x-3)^2 + 3)
+
+# output
+
+(3.0, 3.0)
+```
+"""
+function quadratic_fit_1d(f::Function)
+    a, negative_2ab, _ = [.5 -1 .5; -1.5 2 -.5; 1.0 .0 .0] * f.(0:2)
+    b = -negative_2ab / (2a)
+    return b, f(b)
+end
+
 function all_spread(U, scheme, ::Type{Branch}) where {Branch}
     M = gauge_transform(neighbor_basis_integral(scheme), U)
     N = n_band(M)
@@ -129,7 +153,9 @@ function (optimizer::ILAOptimizer)(U::Gauge, ::Type{Branch}, ::Type{AcceleratedG
     N = optimizer |> scheme |> neighbor_basis_integral |> n_band
     brillouin_zone = grid(U)
     f = U -> sum(all_spread(U, scheme(optimizer), Branch))
-    ∇f = U -> Gauge{typeof(brillouin_zone)}(brillouin_zone, elements(gauge_gradient(U, scheme(optimizer), brillouin_zone, Branch)))
+    ∇f = U -> let M = gauge_transform(neighbor_basis_integral(scheme(optimizer)), U)
+        Gauge{typeof(brillouin_zone)}(brillouin_zone, elements(gauge_gradient(M, scheme(optimizer), brillouin_zone, Branch)))
+    end
     ∇f² = ∇f -> sum(k -> norm(reshape(∇f[k], N^2))^2, brillouin_zone)
     α = α_0
     t = 1
@@ -156,7 +182,9 @@ function (optimizer::ILAOptimizer)(U::Gauge, ::Type{Branch}, ::Type{FletcherReev
     N = optimizer |> scheme |> neighbor_basis_integral |> n_band
     brillouin_zone = grid(U)
     f = U -> sum(all_spread(U, scheme(optimizer), Branch))
-    ∇f = U -> Gauge{typeof(brillouin_zone)}(brillouin_zone, elements(gauge_gradient(U, scheme(optimizer), brillouin_zone, Branch)))
+    ∇f = U -> let M = gauge_transform(neighbor_basis_integral(scheme(optimizer)), U)
+        Gauge{typeof(brillouin_zone)}(brillouin_zone, elements(gauge_gradient(M, scheme(optimizer), brillouin_zone, Branch)))
+    end
     ∇f² = ∇f -> sum(k -> norm(reshape(∇f[k], N^2))^2, brillouin_zone)
     current_iteration = 0
     h_old, g_old = f(U), ∇f(U)

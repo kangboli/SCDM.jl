@@ -18,6 +18,7 @@ export ApproximationScheme,
     W90BranchCut,
     TruncatedConvolution,
     STDC,
+    RTDC,
     gauge_gradient,
     scheme,
     gauge_gradient_k_point_contribution
@@ -237,6 +238,11 @@ The separated truncated convolution.
 """
 abstract type STDC end
 
+"""
+The reduced truncated convolution
+"""
+abstract type RTDC end
+
 center(scheme::CosScheme, n::Integer) = center(scheme, n, W90BranchCut)
 center(scheme::CosScheme, n::Integer, ::Type{T}) where {T} = center(neighbor_basis_integral(scheme), scheme, n, T)
 center(M::NeighborIntegral, scheme::CosScheme, n::Integer) = center(M, scheme, n, W90BranchCut)
@@ -316,7 +322,6 @@ function center(M::NeighborIntegral, scheme::CosScheme, n::Int, ::Type{Truncated
     end
 end
 
-
 function center(M::NeighborIntegral, scheme::CosScheme, n::Int, ::Type{BranchStable})
     kpoint_contribution(k::KPoint) = -sum(zip(weights(scheme), shells(scheme))) do (w, shell)
         sum(unique(k -> Set([k, -k]), shell)) do b
@@ -390,6 +395,17 @@ function spread(M::NeighborIntegral, scheme::CosScheme, n::Integer, ::Type{Trunc
     end
 end
 
+function spread(M::NeighborIntegral, scheme::CosScheme, n::Integer, ::Type{RTDC})
+    brillouin_zone = collect(grid(scheme))
+    ρ̃(b) = sum(k -> M[k, k+b][n, n], brillouin_zone) / length(brillouin_zone)
+
+    let w = weights(scheme)[1]
+        sum(b -> 2w * (1 - abs(ρ̃(b))), [grid(scheme)[0,0,1], grid(scheme)[0,1,0], grid(scheme)[1,0,0],
+        grid(scheme)[0,0,-1], grid(scheme)[0,-1,0], grid(scheme)[-1,0,0]
+        ])
+    end
+end
+
 # for k in brillouin_zone
 #     (m -> cache!(m, M)).(u[k])
 # end
@@ -399,19 +415,19 @@ function WTP.n_band(M::NeighborIntegral)
     return size(first_matrix, 1)
 end
 
-gauge_gradient(U::Gauge, scheme::CosScheme, brillouin_zone::BrillouinZone) =
-    gauge_gradient(U::Gauge, scheme::CosScheme, brillouin_zone::BrillouinZone, W90BranchCut)
+gauge_gradient(M::NeighborIntegral, scheme::CosScheme, brillouin_zone::BrillouinZone) =
+    gauge_gradient(M, scheme, brillouin_zone, W90BranchCut)
 
 
 """
-    gauge_gradient(U, scheme, brillouin_zone, W90BranchCut)
+    gauge_gradient(M, scheme, brillouin_zone, W90BranchCut)
 
 Gauge gradient in the original Wannier90. 
 The result is a `OnGrid{<:BrillouinZone}`
 with a matrix on each k-point.
 
 ```jldoctest orbital_set
-julia> G_w = gauge_gradient(U, scheme, brillouin_zone, W90BranchCut);
+julia> G_w = gauge_gradient(M, scheme, brillouin_zone, W90BranchCut);
 julia> G_w[brillouin_zone[0, 0, 1]]
 4×4 Matrix{ComplexF64}:
        0.0-0.030634im     -1.13757+0.493027im   0.145804-0.00940629im  -0.0627567-0.0302657im
@@ -420,8 +436,7 @@ julia> G_w[brillouin_zone[0, 0, 1]]
  0.0627567-0.0302657im   -0.885767+0.370595im  0.0557475+0.0957635im          0.0-0.12397im
 ```
 """
-function gauge_gradient(U::Gauge, scheme::CosScheme, brillouin_zone::B, ::Type{W90BranchCut}) where {B<:BrillouinZone}
-    M = gauge_transform(neighbor_basis_integral(scheme), U)
+function gauge_gradient(M::NeighborIntegral, scheme::CosScheme, brillouin_zone::B, ::Type{W90BranchCut}) where {B<:BrillouinZone}
     N = n_band(M)
     c = (n -> center(M, scheme, n, W90BranchCut)).(1:N)
 
@@ -439,7 +454,7 @@ function gauge_gradient(U::Gauge, scheme::CosScheme, brillouin_zone::B, ::Type{W
 end
 
 """
-    gauge_gradient(U, scheme, brillouin_zone, TruncatedConvolution) 
+    gauge_gradient(M, scheme, brillouin_zone, TruncatedConvolution) 
 
 Gauge gradient for the truncated convolution. 
 The result is a `OnGrid{<:BrillouinZone}`
@@ -455,8 +470,8 @@ julia> G_t[brillouin_zone[0, 0, 1]]
   0.0646812+0.0334942im    -0.205487+0.0206957im   0.070136+0.157672im          0.0-0.0640979im
 ```
 """
-function gauge_gradient(U::Gauge, scheme::CosScheme, brillouin_zone::B, ::Type{TruncatedConvolution}) where {B<:BrillouinZone}
-    M = gauge_transform(neighbor_basis_integral(scheme), U)
+function gauge_gradient(M::NeighborIntegral, scheme::CosScheme, brillouin_zone::B, ::Type{TruncatedConvolution}) where {B<:BrillouinZone}
+    # M = gauge_transform(neighbor_basis_integral(scheme), U)
     N = n_band(M)
 
     ρ̃ = Dict(b => (n -> 1 / N * sum(k -> M[k, k+b][n, n], brillouin_zone)).(1:N) for b in vcat(shells(scheme)...))
@@ -466,13 +481,32 @@ function gauge_gradient(U::Gauge, scheme::CosScheme, brillouin_zone::B, ::Type{T
             R = hcat([M[k, k+b][:, n] * ρ̃[b][n]' / abs(ρ̃[b][n]) for n = 1:N]...)
             2w * (R - R') / length(brillouin_zone)
         end
-    end
+    end 
 
     return map(G, brillouin_zone)
 end
 
-function gauge_gradient_k_point_contribution(U::Gauge, scheme::CosScheme, brillouin_zone::B, k::KPoint, ::Type{STDC}) where {B<:BrillouinZone}
-    M = gauge_transform(neighbor_basis_integral(scheme), U)
+function gauge_gradient(M::NeighborIntegral, scheme::CosScheme, brillouin_zone::B, ::Type{RTDC}) where {B<:BrillouinZone}
+    # M = gauge_transform(neighbor_basis_integral(scheme), U)
+    N = n_band(M)
+
+    ρ̃ = Dict(b => (n -> 1 / N * sum(k -> M[k, k+b][n, n], brillouin_zone)).(1:N) for b in vcat(shells(scheme)...))
+
+    G = k -> let w = weights(scheme)[1]
+        sum([brillouin_zone[0,0,1], brillouin_zone[0,1,0], brillouin_zone[1,0,0],
+        brillouin_zone[0,0,-1], brillouin_zone[0,-1,0], brillouin_zone[-1,0,0]
+        ]) do b
+            R = hcat([M[k, k+b][:, n] * ρ̃[b][n]' / abs(ρ̃[b][n]) for n = 1:N]...)
+            2w * (R - R') / length(brillouin_zone)
+        end
+    end 
+
+    return map(G, brillouin_zone)
+end
+
+
+function gauge_gradient_k_point_contribution(M::NeighborIntegral, scheme::CosScheme, brillouin_zone::B, k::KPoint, ::Type{STDC}) where {B<:BrillouinZone}
+    # M = gauge_transform(neighbor_basis_integral(scheme), U)
     N = n_band(M)
 
     sum(zip(weights(scheme), shells(scheme))) do (w, shell)
@@ -483,12 +517,12 @@ function gauge_gradient_k_point_contribution(U::Gauge, scheme::CosScheme, brillo
     end
 end
 
-function gauge_gradient(U::Gauge, scheme::CosScheme, brillouin_zone::B, ::Type{STDC}) where {B<:BrillouinZone}
-    map(k->gauge_gradient_k_point_contribution(U, scheme, brillouin_zone, k, STDC), brillouin_zone)
+function gauge_gradient(M::NeighborIntegral, scheme::CosScheme, brillouin_zone::B, ::Type{STDC}) where {B<:BrillouinZone}
+    map(k->gauge_gradient_k_point_contribution(M, scheme, brillouin_zone, k, STDC), brillouin_zone)
 end
 
-function all_spread_k_point_contribution(U, scheme, k, ::Type{Branch}) where {Branch}
-    M = gauge_transform(neighbor_basis_integral(scheme), U)
+function all_spread_k_point_contribution(M::NeighborIntegral, scheme, k, ::Type{Branch}) where {Branch}
+    # M = gauge_transform(neighbor_basis_integral(scheme), U)
     N = n_band(M)
     return map(1:N) do n
         spread_k_point_contribution(M, scheme, n, k, Branch)
