@@ -4,8 +4,10 @@ export scdm_condense_phase
     scdm_condense_phase(u, bands, [ortho=true])
 
 Perform SCDM for condense phase orbitals.
-The `bands` amongst the orbitals `u::Wannier` will be localized.
+The `bands` amongst the orbitals `u::OrbitalSet` will be localized.
 The rest of the gauge will be an identity matrix.
+
+The result will be a Gauge `U` and the selected `columns`.
 """
 function scdm_condense_phase(u::OrbitalSet{UnkBasisOrbital{T}}, bands::AbstractVector{<:Integer}, ortho=true) where T <: HomeCell
     brillouin_zone, homecell = grid(u), orbital_grid(u)

@@ -6,4 +6,5 @@
 **/*.chk
 **/cmd.sh
 **/.ipynb_checkpoints
+**/build
 # **/*.dat

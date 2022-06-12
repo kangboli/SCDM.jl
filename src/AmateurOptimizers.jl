@@ -54,8 +54,9 @@ end
 """
     ILAOptimizer(scheme)
 
-A vanilla gradient descent optimizer with line search. There are probably faster algorithms,
-but this simple optimizer is already out of the scope of this package. 
+An amateur manifold optimizer with gradient descent, accelerated gradient
+descent, and conjugate gradient. The project aims to integrate with `manopt.jl`
+and deprecate the custom optimizer except for debugging.
 
 Example:
 
@@ -223,7 +224,7 @@ function log(optimizer, U, current_iteration, Ω, ∇Ω², α)
     # println()
 
     # N = optimizer |> scheme |> neighbor_basis_integral |> n_band
-    # append!(logger(optimizer)[:truncated_convolution_spread], [all_spread(U, scheme(optimizer), TruncatedConvolution)])
+    append!(logger(optimizer)[:truncated_convolution_spread], [all_spread(U, scheme(optimizer), TruncatedConvolution)])
     append!(logger(optimizer)[:w90_branch_cut_spread], [all_spread(U, scheme(optimizer), W90BranchCut)])
     # append!(logger(optimizer)[:truncated_convolution_center], [hcat(all_center(U, scheme(optimizer), TruncatedConvolution)...)])
     # append!(logger(optimizer)[:w90_branch_cut_center], [hcat(all_center(U, scheme(optimizer), W90BranchCut)...)])
@@ -238,7 +239,7 @@ function log(optimizer, U, current_iteration, Ω, ∇Ω², α)
     # # haskey(optimizer.meta, :convolutional_center)  || (optimizer.meta[:convolutional_center] = Vector{Matrix{Float64}}())
 
 
-    mod(current_iteration, 10) == 0 || return
+    # mod(current_iteration, 10) == 0 || return
     haskey(optimizer.meta, :ũ) || return
     ũ = set_gauge(optimizer.meta[:ũ], U)
     r̃2 = optimizer.meta[:r̃2]

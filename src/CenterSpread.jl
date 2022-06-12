@@ -24,8 +24,19 @@ export ApproximationScheme,
     gauge_gradient_k_point_contribution
 
 
+"""
+    ApproximationScheme
+
+The center and the spread are often approximated for performance.
+Concrete approximations should subtype this.
+"""
 abstract type ApproximationScheme end
 
+"""
+    CosScheme
+
+Approximations based on a single mode of cos.
+"""
 abstract type CosScheme <: ApproximationScheme end
 
 struct CosScheme3D <: CosScheme
@@ -43,7 +54,9 @@ between ``r^2`` and `u` (inverse fft of `ũ`).
 The `CosScheme3D` includes shells of `\\mathbf{b}` vectors and their 
 corresponding weights ``w_{\\mathbf{b}}``.
 
-Example: 
+Other dimensions will be implemented as extensions.
+
+# Example: 
 
 ```jldoctest orbital_set
 julia> scheme = CosScheme3D(ũ);
@@ -395,14 +408,26 @@ function spread(M::NeighborIntegral, scheme::CosScheme, n::Integer, ::Type{Trunc
     end
 end
 
+function spread(M::NeighborIntegral, scheme::CosScheme, n::Integer, ::Type{STDC})
+    brillouin_zone = collect(grid(scheme))
+    ρ̃(b) = sum(k -> abs(M[k, k+b][n, n]), brillouin_zone) / length(brillouin_zone)
+
+    sum(zip(weights(scheme), shells(scheme))) do (w, shell)
+        sum(b -> 2w * (1 - abs(ρ̃(b))), shell)
+    end
+end
 function spread(M::NeighborIntegral, scheme::CosScheme, n::Integer, ::Type{RTDC})
     brillouin_zone = collect(grid(scheme))
     ρ̃(b) = sum(k -> M[k, k+b][n, n], brillouin_zone) / length(brillouin_zone)
-
+    shell = [grid(scheme)[0,0,1], grid(scheme)[0,1,0], grid(scheme)[1,0,0],
+            grid(scheme)[0,0,-1], grid(scheme)[0,-1,0], grid(scheme)[-1,0,0]
+            ]
     let w = weights(scheme)[1]
-        sum(b -> 2w * (1 - abs(ρ̃(b))), [grid(scheme)[0,0,1], grid(scheme)[0,1,0], grid(scheme)[1,0,0],
-        grid(scheme)[0,0,-1], grid(scheme)[0,-1,0], grid(scheme)[-1,0,0]
-        ])
+        for b in shell
+            println(ρ̃(b))
+            println(abs(ρ̃(b)))
+        end
+        sum(b -> 2w * (1 - abs(ρ̃(b))), shell)
     end
 end
 
