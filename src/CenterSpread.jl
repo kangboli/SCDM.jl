@@ -171,7 +171,7 @@ function find_shells(grid::Grid, n_shell::Int)
     d = collect(-2*n_shell:2*n_shell)
     for i in d, j in d, k in d
         k = make_grid_vector(grid, [i, j, k])
-        key = round(norm(cartesian(k)), digits = 5)
+        key = round(norm(coordinates(k)), digits = 5)
         haskey(shells, key) ? append!(shells[key], [k]) : shells[key] = [k]
     end
 
@@ -193,7 +193,7 @@ function compute_weights(neighbor_shells::Vector{Vector{T}}) where {T<:AbstractG
     )
 
     A = zeros((6, length(neighbor_shells)))
-    c(b, i) = cartesian(b)[i]
+    c(b, i) = coordinates(b)[i]
     for s = 1:length(neighbor_shells)
         A[:, s] =
             [sum((b -> c(b, i) * c(b, j)).(neighbor_shells[s])) for (i, j) in keys(indices)]
@@ -283,7 +283,7 @@ julia> center(M, scheme, 2, W90BranchCut)
 """
 function center(M::NeighborIntegral, scheme::CosScheme, n::Int, ::Type{W90BranchCut})
     kpoint_contribution(k::KPoint) = -sum(zip(weights(scheme), shells(scheme))) do (w, shell)
-        sum(b -> w * cartesian(b) * angle(M[k, k+b][n, n]), shell)
+        sum(b -> w * coordinates(b) * angle(M[k, k+b][n, n]), shell)
     end
 
     brillouin_zone = collect(grid(scheme))
@@ -330,7 +330,7 @@ function center(M::NeighborIntegral, scheme::CosScheme, n::Int, ::Type{Truncated
         sum(unique(k -> Set([k, -k]), shell)) do b
             ϕ⁺, ϕ⁻ = phase(b), phase(-b)
             branch = (sign(ϕ⁺) == sign(ϕ⁻) ? -1 : 1)
-            w * cartesian(b) * ϕ⁺ + w * cartesian(-b) * branch * ϕ⁻
+            w * coordinates(b) * ϕ⁺ + w * cartesian(-b) * branch * ϕ⁻
         end
     end
 end
@@ -341,7 +341,7 @@ function center(M::NeighborIntegral, scheme::CosScheme, n::Int, ::Type{BranchSta
             ϕ⁺ = M[k, k+b][n, n] |> angle
             ϕ⁻ = M[k, k-b][n, n] |> angle
             branch = (sign(ϕ⁺) == sign(ϕ⁻) ? -1 : 1)
-            w * cartesian(b) * ϕ⁺ + w * cartesian(-b) * branch * ϕ⁻
+            w * coordinates(b) * ϕ⁺ + w * cartesian(-b) * branch * ϕ⁻
         end
     end
 
@@ -468,7 +468,7 @@ function gauge_gradient(M::NeighborIntegral, scheme::CosScheme, brillouin_zone::
     G = k -> sum(zip(weights(scheme), shells(scheme))) do (w, shell)
         sum(shell) do b
             A = M[k, k+b]
-            q = [angle(A[n, n]) + cartesian(b)' * c[n] for n = 1:N]
+            q = [angle(A[n, n]) + coordinates(b)' * c[n] for n = 1:N]
             R = hcat([A[:, n] * A[n, n]' for n = 1:N]...)
             T = hcat([(A[:, n] / A[n, n]) * q[n] for n = 1:N]...)
             4w * ((R - R') / 2 - (T + T') / 2im) / length(brillouin_zone)
@@ -546,11 +546,11 @@ function gauge_gradient(M::NeighborIntegral, scheme::CosScheme, brillouin_zone::
     map(k->gauge_gradient_k_point_contribution(M, scheme, brillouin_zone, k, STDC), brillouin_zone)
 end
 
-function all_spread_k_point_contribution(M::NeighborIntegral, scheme, k, ::Type{Branch}) where {Branch}
+#= function all_spread_k_point_contribution(M::NeighborIntegral, scheme, k, ::Type{Branch}) where {Branch}
     # M = gauge_transform(neighbor_basis_integral(scheme), U)
     N = n_band(M)
     return map(1:N) do n
         spread_k_point_contribution(M, scheme, n, k, Branch)
     end
 end
-
+ =#

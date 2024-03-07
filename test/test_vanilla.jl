@@ -20,8 +20,6 @@ length(grid(first(Ψ_Γ)))
 
 U, columns = scdm_condense_phase(u, collect(1:4))
 
-# U[brillouin_zone[0,0,0]]
-
 amn = AMN(joinpath(test_1_dir, "unk", "si.amn"))
 
 U_matlab = Gauge(brillouin_zone, amn, k_map, false)
