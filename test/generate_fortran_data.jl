@@ -20,7 +20,7 @@ for (w, shell) in zip(weights(scheme), shells(scheme))
 end
 Nk = length(brillouin_zone)
 Nb = length(shell_list)
-kplusb = zeros(Int32, Nk, Nb)
+kplusb = zeros(Int64, Nk, Nb)
 for k in brillouin_zone
     for (i, b) in enumerate(shell_list)
         kplusb[linear_index(k), i] = linear_index(k + b)
@@ -36,16 +36,16 @@ for k in brillouin_zone
 end
 
 #= u = ifft(ũ) =#
-#= U, columns = scdm_condense_phase(u, collect(1:4))
-M_scdm = gauge_transform(M, U)
-spread(M_scdm, scheme, 1, TruncatedConvolution)
+#= U, columns = scdm_condense_phase(u, collect(1:4)) =#
+#= M_scdm = gauge_transform(M, U)
+spread(M_scdm, scheme, 1, TruncatedConvolution) =#
 UTensor = zeros(ComplexF64, N, N, Nk)
 for k in brillouin_zone
     #= UTensor[:, :, linear_index(k)] = U[k] =#
     UTensor[:, :, linear_index(k)] = diagm(ones(4))
 end
 
-#= using FortranFiles
+using FortranFiles
 
 path = "/home/kl935/projects/fast_wannier"
 f = FortranFile("$(path)/si_data/w_list.fdat", "w")
@@ -65,12 +65,12 @@ write(f, UTensor)
 close(f)
 
 f = FortranFile("$(path)/si_data/dimensions.fdat", "w")
-write(f, Int32(Nk), Int32(Nb), Int32(N))
-close(f) =#
+write(f, Int64(Nk), Int64(Nb), Int64(N))
+close(f)
 
 omega = Vector{Float64}([1.0])
 grad_omega = zeros(ComplexF64, N, N, Nk)
 
-omega_oracle!(MTensor, UTensor, w_list, kplusb, Int32(Nk), Int32(Nb), Int32(N), omega, grad_omega)
+omega_oracle!(MTensor, UTensor, w_list, kplusb, Nk, Nb, N, omega, grad_omega)
 #= ccall((:__oracles_MOD_add_array, "libwannieroracles"), Float64, (Ref{Float64}, Ref{Float64}), 3.0, 4.0) =#
 
