@@ -35,17 +35,18 @@ for k in brillouin_zone
     end
 end
 
-u = ifft(ũ)
-U, columns = scdm_condense_phase(u, collect(1:4))
+#= u = ifft(ũ) =#
+#= U, columns = scdm_condense_phase(u, collect(1:4))
 M_scdm = gauge_transform(M, U)
 spread(M_scdm, scheme, 1, TruncatedConvolution)
-gauge_gradient(M_scdm, scheme, 1, TruncatedConvolution)
+gauge_gradient(M_scdm, scheme, 1, TruncatedConvolution) =#
 UTensor = zeros(ComplexF64, N, N, Nk)
 for k in brillouin_zone
-    UTensor[:, :, linear_index(k)] = U[k]
+    #= UTensor[:, :, linear_index(k)] = U[k] =#
+    UTensor[:, :, linear_index(k)] = diagm(ones(4))
 end
 
-using FortranFiles
+#= using FortranFiles
 
 f = FortranFile("/Users/likangbo/kaer_morhen/projects/wannier_tdc/si_data/w_list.fdat", "w")
 write(f, w_list)
@@ -65,4 +66,11 @@ close(f)
 
 f = FortranFile("/Users/likangbo/kaer_morhen/projects/wannier_tdc/si_data/dimensions.fdat", "w")
 write(f, Int32(Nk), Int32(Nb), Int32(N))
-close(f)
+close(f) =#
+
+omega = Vector{Float64}([1.0])
+grad_omega = zeros(ComplexF64, N, N, Nk)
+
+omega_oracle!(MTensor, UTensor, w_list, kplusb, Int32(Nk), Int32(Nb), Int32(N), omega, grad_omega)
+#= ccall((:__oracles_MOD_add_array, "libwannieroracles"), Float64, (Ref{Float64}, Ref{Float64}), 3.0, 4.0) =#
+
