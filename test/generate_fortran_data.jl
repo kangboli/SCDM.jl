@@ -2,75 +2,35 @@ using WTP
 using SCDM
 using Test
 using LinearAlgebra
-
-const test_5_dir = "./test/test_data/test_5"
-wave_functions_list = wave_functions_from_directory(joinpath(test_5_dir, "si.save"))
-ũ = orbital_set_from_save(wave_functions_list)
-N = n_band(ũ)
-k_map, brillouin_zone = i_kpoint_map(wave_functions_list)
-scheme = CosScheme3D(ũ)
-
-w_list = Vector{Float64}()
-shell_list = []
-for (w, shell) in zip(weights(scheme), shells(scheme))
-    for b in shell
-        push!(w_list, w)
-        push!(shell_list, b)
-    end
-end
-Nk = length(brillouin_zone)
-Nb = length(shell_list)
-kplusb = zeros(Int64, Nk, Nb)
-for k in brillouin_zone
-    for (i, b) in enumerate(shell_list)
-        kplusb[linear_index(k), i] = linear_index(k + b)
-    end
-end
-
-M = neighbor_basis_integral(scheme)
-MTensor = zeros(ComplexF64, N, N,  Nk, Nb)
-for k in brillouin_zone
-    for (i, b) in enumerate(shell_list)
-        MTensor[:, :, linear_index(k), i] = M[k, k+b]
-    end
-end
-
-#= u = ifft(ũ) =#
-#= U, columns = scdm_condense_phase(u, collect(1:4)) =#
-#= M_scdm = gauge_transform(M, U)
-spread(M_scdm, scheme, 1, TruncatedConvolution) =#
-UTensor = zeros(ComplexF64, N, N, Nk)
-for k in brillouin_zone
-    #= UTensor[:, :, linear_index(k)] = U[k] =#
-    UTensor[:, :, linear_index(k)] = diagm(ones(4))
-end
-
 using FortranFiles
 
-path = "/home/kl935/projects/fast_wannier"
-f = FortranFile("$(path)/si_data/w_list.fdat", "w")
-write(f, w_list)
-close(f)
+si_src_dir = "./test/scdm_dataset/Si"
+si_tgt_dir = "/home/kl/projects/fast_wannier/data/Si"
+generate_fortran_data(si_src_dir, si_tgt_dir)
 
-f = FortranFile("$(path)/si_data/kplusb.fdat", "w")
-write(f, kplusb)
-close(f)
+gaas_src_dir = "./test/scdm_dataset/GaAs"
+gaas_tgt_dir = "/home/kl/projects/fast_wannier/data/GaAs"
+generate_fortran_data(gaas_src_dir, gaas_tgt_dir)
 
-f = FortranFile("$(path)/si_data/mmn.fdat", "w")
-write(f, MTensor)
-close(f)
+batio3_src_dir = "./test/scdm_dataset/BaTiO3"
+batio3_tgt_dir = "/home/kl/projects/fast_wannier/data/BaTiO3"
+generate_fortran_data(batio3_src_dir, batio3_tgt_dir)
 
-f = FortranFile("$(path)/si_data/amn.fdat", "w")
-write(f, UTensor)
-close(f)
+fli_src_dir = "./test/scdm_dataset/FLi"
+fli_tgt_dir = "/home/kl/projects/fast_wannier/data/FLi"
+generate_fortran_data(fli_src_dir, fli_tgt_dir)
 
-f = FortranFile("$(path)/si_data/dimensions.fdat", "w")
-write(f, Int64(Nk), Int64(Nb), Int64(N))
-close(f)
+brna_src_dir = "./test/scdm_dataset/BrNa"
+brna_tgt_dir = "/home/kl/projects/fast_wannier/data/BrNa"
+generate_fortran_data(brna_src_dir, brna_tgt_dir)
 
-omega = Vector{Float64}([1.0])
-grad_omega = zeros(ComplexF64, N, N, Nk)
+he_src_dir = "./test/scdm_dataset/He"
+he_tgt_dir = "/home/kl/projects/fast_wannier/data/He"
+generate_fortran_data(he_src_dir, he_tgt_dir)
 
-omega_oracle!(MTensor, UTensor, w_list, kplusb, Nk, Nb, N, omega, grad_omega)
+sih4_src_dir = "./test/scdm_dataset/SiH4"
+sih4_tgt_dir = "/home/kl/projects/fast_wannier/data/SiH4"
+generate_fortran_data(sih4_src_dir, sih4_tgt_dir)
+
 #= ccall((:__oracles_MOD_add_array, "libwannieroracles"), Float64, (Ref{Float64}, Ref{Float64}), 3.0, 4.0) =#
 
