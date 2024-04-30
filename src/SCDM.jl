@@ -8,6 +8,7 @@ include("NeighborIntegrals.jl")
 include("CenterSpread.jl")
 include("Flatten.jl")
 include("oracle_wrapper.jl")
+include("conjugate_gradient.jl")
 #= include("Manopt.jl") =#
 include("AmateurOptimizers.jl")
 
