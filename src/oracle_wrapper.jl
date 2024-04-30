@@ -45,9 +45,9 @@ end
 
 # retract(U, DeltaU, U_work, Nk, Ne, ideg, size_u_work)
 function retract!(U::Array{ComplexF64,3}, delta_U::Array{ComplexF64,3},
-    U_work::Vector{ComplexF64}, Nk::Int64, Nb::Int64, ideg::Int64, size_u_work::Int64)
+    U_work::Vector{ComplexF64}, Nk::Int64, Nb::Int64, ideg::Int64, size_u_work::Int64, t::Float64)
 
     @ccall lib_path.__oracles_MOD_retract(U::Ptr{ComplexF64}, delta_U::Ptr{ComplexF64},
         U_work::Ptr{ComplexF64}, Nk::Ref{Int64}, Nb::Ref{Int64},
-        ideg::Ref{Int64}, size_u_work::Ref{Int64})::Nothing
+        ideg::Ref{Int64}, size_u_work::Ref{Int64}, t::Ref{Float64})::Nothing
 end
