@@ -56,34 +56,35 @@ is evaluated compared to the objective function, which depends on the optimizer.
 Exploring the tradeoff is currently not a priority.
 """
 
-function cg(u_tensor::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract!, N::Int, Nk::Int; logger=Logger())
+function cg(u::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!, n_band::Int; logger=Logger())
     normsq = x -> norm(x)^2
+    n_k = size(u, 3)
     f = record(logger, f_no_wrap!, :f)
     grad_f = record(logger, grad_f_no_wrap!, :grad_f)
-    retract! = record(logger, retract!, :retract)
+    retract! = record(logger, retract_no_wrap!, :retract)
     copy! = record(logger, Base.copy!, :copy)
     axpy! = record(logger, LinearAlgebra.BLAS.axpy!, :axpy)
     normsq = record(logger, normsq, :normsq)
-    f_prev, grad_prev = f(u_tensor), grad_f(u_tensor)
+    f_prev, grad_prev = f(u), grad_f(u)
     res_prev = normsq(grad_prev)
-    p_prev = zeros(ComplexF64, size(u_tensor))
-    u_buffer = zeros(ComplexF64, size(u_tensor))
+    p_prev = zeros(ComplexF64, size(u))
+    u_buffer = zeros(ComplexF64, size(u))
     iter = 0
     lambda_prev = 1
     f_curr = f_prev
     start = time_ns()
 
-    while res_prev / (Nk * N^2) > 1e-7
-        grad_curr = grad_f(u_tensor)
+    while res_prev / (n_k * n_band^2) > 1e-7
+        grad_curr = grad_f(u)
         res_curr = normsq(grad_curr)
         # The fletcher reeves 
-        beta = rem(iter, N^2) == 0 ? 0 : res_curr / res_prev
+        beta = rem(iter, n_band^2) == 0 ? 0 : res_curr / res_prev
         p_curr = grad_curr
         axpy!(beta, p_prev, p_curr)
 
         function try_scale(scale)
             scale == 0 && return f_curr
-            return f(make_step!(u_buffer, u_tensor, p_curr, scale * lambda_prev, retract!))
+            return f(make_step!(u_buffer, u, p_curr, scale * lambda_prev, retract!))
         end
         scale, f_tmp = quadratic_fit_1d(try_scale)
         lambda_curr = scale * lambda_prev
@@ -91,11 +92,11 @@ function cg(u_tensor::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract!
             f_curr = f_tmp
         else # fall back to a gradient descent if the function is not locally convex.
             axpy!(-beta, p_prev, p_curr)
-            f_curr, lambda_curr, _ = line_search!(u_buffer, u_tensor, f, f_curr, p_curr, res_curr, 2lambda_prev, retract!)
+            f_curr, lambda_curr, _ = line_search!(u_buffer, u, f, f_curr, p_curr, res_curr, 2lambda_prev, retract!)
             axpy!(beta, p_prev, p_curr)
         end
 
-        copy!(u_tensor, u_buffer)
+        copy!(u, u_buffer)
 
         lambda_prev = lambda_curr
         f_prev = f_curr
@@ -115,6 +116,6 @@ function cg(u_tensor::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract!
     println("copy: ", logger.timers[:copy] / 1e9)
     println("normsq: ", logger.timers[:normsq] / 1e9)
     println(total_time(logger) / 1e9)
-    return u_tensor
+    return u
 end
 #

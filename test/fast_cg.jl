@@ -1,23 +1,24 @@
 using SCDM, LinearAlgebra, Random, Profile
 
 si_src_dir = "./test/scdm_dataset/Si"
-STensor, UTensor, w_list, kplusb, Nk, Nb, Ne = load_problem(si_src_dir)
+s, u, w_list, k_plus_b, n_k, n_b, n_e = load_problem(si_src_dir)
 
-f = make_f(STensor, w_list, kplusb, Nk, Nb, Ne, Ne)
+f = make_f(s, w_list, k_plus_b, n_k, n_b, n_e, n_e)
 grad_f = make_grad_f(f)
 
 Random.seed!(16)
-UTensor = zeros(ComplexF64, Ne, Ne, Nk)
-for k in 1:Nk
-    A = rand(Ne, Ne)
-    Uu, S, V = svd(A)
-    UTensor[:, :, k] = Uu * V'
+u = zeros(ComplexF64, n_e, n_e, n_k)
+for k in 1:n_k
+    A = rand(n_e, n_e)
+    u[:, :, k] = let (u, _, v) = svd(A)
+        u * v'
+    end
 end
 
-@time cg(UTensor, f, grad_f, retract!, Ne, Nk);
-@time f(UTensor)
-@time grad_f(UTensor);
-@profview cg(UTensor, f, grad_f, Ne, Nk);
+@time cg(u, f, grad_f, retract!, n_e);
+@time f(u)
+@time grad_f(u);
+@profview cg(u, f, grad_f, n_e, n_k);
 
 #= new_U = deepcopy(U)
 for k in axes(p_curr, 3)
@@ -35,4 +36,4 @@ function make_step(U::Array{ComplexF64,3}, p_curr, lambda)
     return retract(U_buf, U, p_curr, float(-lambda))
 end =#
 
-        # lambda_curr, f_tmp = quadratic_fit_1d(lambda -> make_step!(u_buffer, u_tensor, p_curr, lambda) |> f)
+# lambda_curr, f_tmp = quadratic_fit_1d(lambda -> make_step!(u_buffer, u_tensor, p_curr, lambda) |> f)

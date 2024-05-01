@@ -3,16 +3,16 @@ export generate_fortran_data, load_problem, write_fortran_files
 using FortranFiles
 
 function generate_fortran_data(save_dir::String, target_dir::String)
-    MTensor, UTensor, w_list, kplusb, Nk, Nb, N = load_problem(save_dir)
-    write_fortran_files(target_dir, MTensor, UTensor, w_list, kplusb, Nk, Nb, N) 
+    m, u, w_list, kplusb, Nk, Nb, N = load_problem(save_dir)
+    write_fortran_files(target_dir, m, u, w_list, kplusb, Nk, Nb, N) 
 end
 
 function load_problem(save_dir::String)
     wave_functions_list = wave_functions_from_directory(joinpath(save_dir, "aiida.save"))
-    ũ = orbital_set_from_save(wave_functions_list)
-    N = n_band(ũ)
+    orbital_set = orbital_set_from_save(wave_functions_list)
+    n_e = n_band(orbital_set)
     _, brillouin_zone = i_kpoint_map(wave_functions_list)
-    scheme = CosScheme3D(ũ)
+    scheme = CosScheme3D(orbital_set)
     w_list = Vector{Float64}()
     shell_list = []
     for (w, shell) in zip(weights(scheme), shells(scheme))
@@ -22,33 +22,33 @@ function load_problem(save_dir::String)
         end
     end
 
-    Nk = length(brillouin_zone)
-    Nb = length(shell_list)
-    kplusb = zeros(Int64, Nk, Nb)
+    n_k = length(brillouin_zone)
+    n_b = length(shell_list)
+    k_plus_b = zeros(Int64, n_k, n_b)
     for k in brillouin_zone
         for (i, b) in enumerate(shell_list)
-            kplusb[linear_index(k), i] = linear_index(k + b)
+            k_plus_b[linear_index(k), i] = linear_index(k + b)
         end
     end
 
-    M = neighbor_basis_integral(scheme) 
-    MTensor = zeros(ComplexF64, N, N,  Nk, Nb)
+    neighbor_integral = neighbor_basis_integral(scheme) 
+    s = zeros(ComplexF64, n_e, n_e,  n_k, n_b)
     for k in brillouin_zone
         for (i, b) in enumerate(shell_list)
-            MTensor[:, :, linear_index(k), i] = M[k, k+b]
+            s[:, :, linear_index(k), i] = neighbor_integral[k, k+b]
         end
     end
 
-    u = ifft(ũ)
-    U, _ = scdm_condense_phase(u, collect(1:N))
-    M_scdm = gauge_transform(M, U)
-    println("$(N) bands")
-    sum(i->spread(M_scdm, scheme, i, TruncatedConvolution),1:N) |> println
-    UTensor = zeros(ComplexF64, N, N, Nk)
+    orbital_set_real = ifft(orbital_set)
+    scdm_gauge, _ = scdm_condense_phase(orbital_set_real, collect(1:n_e))
+    M_scdm = gauge_transform(neighbor_integral, scdm_gauge)
+    println("$(n_e) bands")
+    sum(i->spread(M_scdm, scheme, i, TruncatedConvolution),1:n_e) |> println
+    u_scdm = zeros(ComplexF64, n_e, n_e, n_k)
     for k in brillouin_zone
-        UTensor[:, :, linear_index(k)] = U[k]
+        u_scdm[:, :, linear_index(k)] = scdm_gauge[k]
     end
-    return MTensor, UTensor, w_list, kplusb, Nk, Nb, N
+    return s, u_scdm, w_list, k_plus_b, n_k, n_b, n_e
 end
 
 
