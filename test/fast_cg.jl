@@ -14,7 +14,7 @@ for k in 1:Nk
     UTensor[:, :, k] = Uu * V'
 end
 
-@time cg(UTensor, f, grad_f, Ne, Nk);
+@time cg(UTensor, f, grad_f, retract!, Ne, Nk);
 @time f(UTensor)
 @time grad_f(UTensor);
 @profview cg(UTensor, f, grad_f, Ne, Nk);
