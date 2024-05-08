@@ -35,6 +35,7 @@ function (f::OracleF)(u::Array{ComplexF64,3})
             for n in 1:f.n_e
                 f.m_work[n] += dot(view(u, :, n, k), view(f.r, :, n, k, b))
             end
+            #= axpy!(1, reduce(+, view(u, :, :, k)' .* view(f.r, :, :, k, b); dims=2), f.m_work) =#
         end
         f.rho_hat[:, b] = f.m_work / f.n_k
         f.omega[1] = f.omega[1] + 2 * f.w_list[b] * (f.n_e - sum(abs.(view(f.rho_hat, :, b))))
