@@ -10,8 +10,8 @@ Random.seed!(16)
 u = zeros(ComplexF64, n_e, n_e, n_k)
 
 for k in 1:n_k
-    A = rand(n_e, n_e)
-    u[:, :, k] = let (u, _, v) = svd(A)
+    a = rand(n_e, n_e)
+    u[:, :, k] = let (u, _, v) = svd(a)
         u * v'
     end
 end

@@ -111,17 +111,17 @@ function cg(u::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap
     end
     finish = time_ns()
     BLAS.set_num_threads(n_threads)
-    println("final obj: ", f_curr)
-    println("total time: ", (finish - start) / 1e9)
-    println("iter: ", iter)
-    println("f_eval: ", logger.evals[:f])
-    println("f: ",  logger.timers[:f] / 1e9)
-    println("grad_f: ", logger.timers[:grad_f] / 1e9)
+    println("value:   ", f_curr)
+    println("iter:    ", iter)
+    println("f_eval:  ", logger.evals[:f])
+    println("f:       ",  logger.timers[:f] / 1e9)
+    println("grad_f:  ", logger.timers[:grad_f] / 1e9)
     println("retract: ", logger.timers[:retract] / 1e9)
-    println("axpy: ", logger.timers[:axpy] / 1e9)
-    println("copy: ", logger.timers[:copy] / 1e9)
-    println("normsq: ", logger.timers[:normsq] / 1e9)
-    println(total_time(logger) / 1e9)
+    println("axpy:    ", logger.timers[:axpy] / 1e9)
+    println("copy:    ", logger.timers[:copy] / 1e9)
+    println("normsq:  ", logger.timers[:normsq] / 1e9)
+    println("compute: ", total_time(logger) / 1e9)
+    println("wall:    ", (finish - start) / 1e9)
     return u
 end
 #

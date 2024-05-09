@@ -23,19 +23,12 @@ function make_f(s::Array{ComplexF64,4}, w_list, kplusb, n_k, n_b, n_e, n_j)
 end
 
 function (f::OracleF)(u::Array{ComplexF64,3})
-    #= f_oracle!(f.STensor, f.r, UTensor, f.w_list, f.kplusb, f.rho_hat, f.n_k, f.n_b, f.n_e, f.Nj, f.omega) =#
-    #= LinearAlgebra.BLAS.gemm!('N', 'N', one, f.STensor[:, :, k, b], UTensor[:, :, f.kplusb[k, b]], zero, view(f.r, :, :, k, b)) =#
-    #= rho_hat_handle = reinterpret(Float64, f.rho_hat) =#
     fill!(f.rho_hat, 0)
     fill!(f.m_work, 0)
-    fill!(f.r, 0)
     Threads.@threads for k in 1:f.n_k
-        #= @time for k in 1:f.n_k =#
         for b in 1:f.n_b
             @inbounds mul!(view(f.r, :, :, k, b), view(f.s, :, :, k, b), view(u, :, :, f.k_plus_b[k, b]))
         end
-        #= end
-        for k in 1:f.n_k =#
         for n in 1:f.n_e
             for b in 1:f.n_b
                 @inbounds f.m_work[n, k, b] = dot(view(u, :, n, k), view(f.r, :, n, k, b))
@@ -124,11 +117,8 @@ struct ExpRetraction end
 function retract!(u_buffer, u, d_u, t, ::QRRetraction)
     n_e, _, n_k = size(u)
     copy!(u_buffer, u)
-    axpy!(t, d_u, u_buffer)
-    #= time_1 = time_ns() =#
-    #= qrfacs = [qr!(u_buffer[:, :, k]) for k = 1:n_k] =#
-    #= time_2 = time_ns() =#
     Threads.@threads for k in 1:n_k
+        axpy!(t, view(d_u, :, :, k), view(u_buffer, :, :, k))
         for p = 1:n_e
             norm_p = norm(view(u_buffer, :, p, k))
             lmul!(1 / norm_p, view(u_buffer, :, p, k))
@@ -137,13 +127,7 @@ function retract!(u_buffer, u, d_u, t, ::QRRetraction)
                 axpy!(-r, view(u_buffer, :, p, k), view(u_buffer, :, q, k))
             end
         end
-        #= d = diag(qrfacs[k].R)
-        D = Diagonal(sign.(sign.(d .+ 1 // 2)))
-        mul!(view(u_buffer, :, :, k), Matrix(qrfacs[k].Q), D) =#
     end
-    #= time_3 = time_ns()
-    println("qr time: ", time_2 - time_1)
-    println("mul time: ", time_3 - time_2) =#
 end
 
 function retract!(u_buffer, u, d_u, t, ::SVDRetraction)
