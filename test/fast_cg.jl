@@ -1,13 +1,14 @@
 using SCDM, LinearAlgebra, Random, Profile
 
-si_src_dir = "./test/scdm_dataset/Si"
-s, u, w_list, k_plus_b, n_k, n_b, n_e = load_problem(si_src_dir)
+src_dir = "./test/scdm_dataset/BaTiO3"
+s, u, w_list, k_plus_b, n_k, n_b, n_e = load_problem(src_dir)
 
 f = make_f(s, w_list, k_plus_b, n_k, n_b, n_e, n_e)
 grad_f = make_grad_f(f)
 
 Random.seed!(16)
 u = zeros(ComplexF64, n_e, n_e, n_k)
+
 for k in 1:n_k
     A = rand(n_e, n_e)
     u[:, :, k] = let (u, _, v) = svd(A)

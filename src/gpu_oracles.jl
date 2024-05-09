@@ -1,3 +1,4 @@
+
 export OracleF, OracleGradF, make_f, make_grad_f, retract!
 
 struct OracleF
@@ -29,28 +30,48 @@ function (f::OracleF)(u::Array{ComplexF64,3})
     fill!(f.rho_hat, 0)
     fill!(f.m_work, 0)
     fill!(f.r, 0)
-    Threads.@threads for k in 1:f.n_k
+    BLAS.set_num_threads(1)
+    @time Threads.@threads for k in 1:f.n_k
         #= @time for k in 1:f.n_k =#
         for b in 1:f.n_b
+            #= for z in 1:f.n_e
+                for p in 1:f.n_e
+                    for q in 1:f.n_e
+                        @inbounds f.r[p, q, k, b] += f.s[p, z, k, b] * u[z, q, f.k_plus_b[k, b]]
+                    end
+                end
+            end =#
             @inbounds mul!(view(f.r, :, :, k, b), view(f.s, :, :, k, b), view(u, :, :, f.k_plus_b[k, b]))
         end
-        #= end
-        for k in 1:f.n_k =#
+    end
+    BLAS.set_num_threads(Threads.nthreads)
+
+    for k in 1:f.n_k
         for n in 1:f.n_e
             for b in 1:f.n_b
                 @inbounds f.m_work[n, k, b] = dot(view(u, :, n, k), view(f.r, :, n, k, b))
+                #= for i in 1:f.n_e
+                    @inbounds f.m_work[n, k, b] += conj(u[i, n, k]) * f.r[i, n, k, b]
+                end =#
             end
         end
     end
 
-    Threads.@threads for n in 1:f.n_e
-        for k in 1:f.n_k
+    #= rho_hat_handle = reinterpret(Float64, f.rho_hat)
+    m_work_handle = reinterpret(Float64, f.m_work) =#
+    for k in 1:f.n_k
+        for n in 1:f.n_e
+            #= n1, n2 = 2n - 1, 2n =#
             for b in 1:f.n_b
                 @inbounds f.rho_hat[n, b] += f.m_work[n, k, b]
+                #= @inbounds rho_hat_handle[n1, b] += m_work_handle[n1, b]
+                @inbounds rho_hat_handle[n2, b] += m_work_handle[n2, b] =#
             end
         end
     end
     lmul!(1 / f.n_k, f.rho_hat)
+    #= map!(abs, view()f.m_work, f.rho_hat) =#
+    #= axpby!(1 / f.n_k, f.m_work, 0, f.rho_hat) =#
 
     for b in 1:f.n_b
         #= f.omega[b] = 2 * f.w_list[b] * (f.n_e - sum(real, view(f.m_work, :, b))) =#
@@ -72,47 +93,30 @@ function make_grad_f(f::OracleF)
     return OracleGradF(f, grad_work, grad_omega)
 end
 
-function anti_symmetrize!(dst, src)
-    for i in axes(src, 1)
-        for j in axes(src, 2)
-            dst[i, j] = (src[i, j] - src[j, i]') / 2
-        end
-    end
-    return dst
-end
-
 function (grad_f::OracleGradF)(u::Array{ComplexF64,3})
     f = grad_f.f
     #= grad_f_oracle!(f.r, f.w_list, f.rho_hat, f.n_k, f.n_b, f.n_e, f.Nj, grad_f.grad_omega) =#
     fill!(grad_f.grad_omega, 0)
-    map!(abs, view(f.m_work, :, :, 1), f.rho_hat)
-    map!(conj, f.rho_hat, f.rho_hat)
-    map!(/, f.rho_hat, f.rho_hat, view(f.m_work, :, :, 1))
+    copy!(f.rho_hat, conj.(f.rho_hat) ./ abs.(f.rho_hat))
 
     for b in 1:f.n_b
         rmul!(view(f.rho_hat, :, b), f.w_list[b])
-    end
-
-    Threads.@threads for k in 1:f.n_k
-        for b in 1:f.n_b
-            #= ] = f.rho_hat[:, b] * f.w_list[b] =#
-            for n = 1:f.n_e
-                axpy!(f.rho_hat[n, b], view(f.r, :, n, k, b), view(grad_f.grad_omega, :, n, k))
-            end
+        #= ] = f.rho_hat[:, b] * f.w_list[b] =#
+        for n = 1:f.n_e
+            axpy!(f.rho_hat[n, b], view(f.r, :, n, :, b), view(grad_f.grad_omega, :, n, :))
         end
     end
     #= LinearAlgebra.axpy!((-2 / f.n_k), grad_f.grad_omega, grad_f.grad_omega) =#
+    lmul!(-2 / f.n_k, grad_f.grad_omega)
 
     #= SCDM.project!(UTensor, grad_f.grad_omega, grad_f.grad_work, f.n_k, f.n_e) =#
-    Threads.@threads for k in 1:f.n_k
-        lmul!(-2 / f.n_k, view(grad_f.grad_omega, :, :, k))
+    for k in 1:f.n_k
         #= LinearAlgebra.BLAS.gemm!('C', 'N', ComplexF64(1), view(UTensor, :, :, k),
             view(grad_f.grad_omega, :, :, k), ComplexF64(0), grad_f.grad_work)
         grad_f.grad_omega[:, :, k] = grad_f.grad_work - grad_f.grad_work' =#
 
-        BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), view(f.r, :, :, k, 1))
-        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), anti_symmetrize!(view(f.r, :, :, k, 2), view(f.r, :, :, k, 1)))
-        #= mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (view(f.r, :, :, k, 1) - view(f.r, :, :, k, 1)')/2) =#
+        BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), grad_f.grad_work)
+        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (grad_f.grad_work - grad_f.grad_work') / 2)
     end
     return grad_f.grad_omega
 end
@@ -128,7 +132,7 @@ function retract!(u_buffer, u, d_u, t, ::QRRetraction)
     #= time_1 = time_ns() =#
     #= qrfacs = [qr!(u_buffer[:, :, k]) for k = 1:n_k] =#
     #= time_2 = time_ns() =#
-    Threads.@threads for k in 1:n_k
+    for k in 1:n_k
         for p = 1:n_e
             norm_p = norm(view(u_buffer, :, p, k))
             lmul!(1 / norm_p, view(u_buffer, :, p, k))
@@ -166,3 +170,8 @@ function retract!(u_buffer, u, d_u, t, ::ExpRetraction)
     end
 end
 
+    #= for n in 1:f.n_e
+        for b in 1:f.n_b
+            @inbounds f.rho_hat[n, b] = dot(view(u, :, n, :), view(f.r, :, n, :, b))
+        end
+    end =#

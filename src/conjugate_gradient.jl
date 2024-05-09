@@ -1,4 +1,5 @@
 export cg
+using Printf
 
 function quadratic_fit_1d(f::Function)
     a, negative_2ab, _ = [0.5 -1 0.5; -1.5 2 -0.5; 1.0 0.0 0.0] * f.(0:2)
@@ -57,6 +58,8 @@ Exploring the tradeoff is currently not a priority.
 """
 
 function cg(u::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!, n_band::Int; logger=Logger())
+    n_threads = BLAS.get_num_threads()
+    BLAS.set_num_threads(1)
     normsq = x -> norm(x)^2
     n_k = size(u, 3)
     f = record(logger, f_no_wrap!, :f)
@@ -70,7 +73,8 @@ function cg(u::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap
     p_prev = zeros(ComplexF64, size(u))
     u_buffer = zeros(ComplexF64, size(u))
     iter = 0
-    lambda_prev = 1
+    lambda_prev = 1 
+    #= println(res_prev) =#
     f_curr = f_prev
     start = time_ns()
 
@@ -102,13 +106,15 @@ function cg(u::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap
         f_prev = f_curr
         copy!(p_prev, p_curr)
         res_prev = res_curr
-        #= println(f_curr) =#
+        @printf "f_curr: %.3f, lambda: %.3e, res: %.3e\n" f_curr lambda_curr res_curr
         iter += 1
     end
     finish = time_ns()
-    println("total: ", (finish - start) / 1e9)
-    println(iter)
-    println(logger.evals[:f])
+    BLAS.set_num_threads(n_threads)
+    println("final obj: ", f_curr)
+    println("total time: ", (finish - start) / 1e9)
+    println("iter: ", iter)
+    println("f_eval: ", logger.evals[:f])
     println("f: ",  logger.timers[:f] / 1e9)
     println("grad_f: ", logger.timers[:grad_f] / 1e9)
     println("retract: ", logger.timers[:retract] / 1e9)
