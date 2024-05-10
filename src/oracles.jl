@@ -103,8 +103,8 @@ function (grad_f::OracleGradF)(u::Array{ComplexF64,3})
             view(grad_f.grad_omega, :, :, k), ComplexF64(0), grad_f.grad_work)
         grad_f.grad_omega[:, :, k] = grad_f.grad_work - grad_f.grad_work' =#
 
-        BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), view(f.r, :, :, k, 1))
-        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), anti_symmetrize!(view(f.r, :, :, k, 2), view(f.r, :, :, k, 1)))
+        BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), grad_f.grad_work)
+        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (grad_f.grad_work - grad_f.grad_work')/2)
         #= mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (view(f.r, :, :, k, 1) - view(f.r, :, :, k, 1)')/2) =#
     end
     return grad_f.grad_omega

@@ -6,17 +6,17 @@ const ComplexGPU = ComplexF32
 
 struct GPUOracleF
     s::CuArray{ComplexGPU,4}
-    w_list::Vector{Float64}
+    w_list::Vector{Float32}
     k_plus_b::CuArray{Int64,2}
     k_minus_b::CuArray{Int64,2}
-    n_k::Int64
-    n_b::Int64
-    n_e::Int64
-    n_j::Int64
+    n_k::Int32
+    n_b::Int32
+    n_e::Int32
+    n_j::Int32
     r::CuArray{ComplexGPU,4}
     rho_hat_cpu::Array{ComplexGPU,2}
     rho_hat::CuArray{ComplexGPU,2}
-    omega::Vector{Float64}
+    omega::Vector{Float32}
     m_work::CuArray{ComplexGPU,3}
 end
 
@@ -36,52 +36,70 @@ function make_f_gpu(s, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e, n_j)
     GPUOracleF(s, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e, n_j, r, rho_hat_cpu, rho_hat, omega, m_work)
 end
 
-function f_kernel_1(st, r, u, k_plus_b, k_minus_b, n_k, n_b, n_e)
-    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-    stride = gridDim().x * blockDim().x
-    n_e2 = n_e^2
-    for i in index-1:stride:(n_k*n_e2)-1
-        k, pq = divrem(i, n_e2)
-        # pq, k = divrem(i, n_k)
-        k += 1
-        pq += 1
-        q, p = divrem(pq - 1, n_e)
-        p += 1
-        q += 1
-        #= end
-        for k in index:stride:n_k
-            for p in 1:n_e =#
-        for b in 1:n_b
-            # kpb = k_plus_b[k, b]
-            kmb = k_minus_b[k, b]
-            for z in 1:n_e
-                #= for q in 1:n_e =#
-                # r[p, q, k, b] += s[p, z, k, b] * u[z, q, kpb]
-                r[p, q, kmb, b] += st[z, p, kmb, b] * u[z, q, k]
-            end
-            #= end =#
-            #= end =#
-        end
+function f_kernel_1(st, r, u, k_plus_b, k_minus_b, n_k, n_b, n_e, n_s)
+    #= index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x =#
+    #= n_e2 = n_e^2 =#
+    u_tmp = CuDynamicSharedArray(ComplexGPU, n_e * n_s)
+    #= for i in index-1:stride:(n_k*n_e2)-1 =#
+    #= n_bar = div(n_e - 1, n_s) + 1 =#
+    bar, k = divrem(blockIdx().x - 1, n_k)
+    k += 1
+    bar += 1
+    pq = threadIdx().x
+    #= k, pq = divrem(i, n_e2) =#
+    # pq, k = divrem(i, n_k)
+    #= k += 1
+    pq += 1 =#
+    q, p = divrem(pq - 1, n_e)
+    #= p, q  = divrem(pq - 1, n_s) =#
+    p += 1
+    q += 1
+    qb = q + (bar - 1) * n_s
+    if qb > n_e
+        return nothing
     end
+
+    u_tmp[pq] = u[p, qb, k]
+    sync_threads()
+    #= end
+    for k in index:stride:n_k
+        for p in 1:n_e =#
+    for b in 1:n_b
+        # kpb = k_plus_b[k, b]
+        kmb = k_minus_b[k, b]
+        qe = (q - 1) * n_e
+        for z in 1:n_e
+            #= for q in 1:n_e =#
+            # r[p, q, k, b] += s[p, z, k, b] * u[z, q, kpb]
+            #= r[p, q, kmb, b] += st[z, p, kmb, b] * u[z, q, k] =#
+            #= r[p, qb, kmb, b] += st[z, p, kmb, b] * u[z, qb, k] =#
+            r[p, qb, kmb, b] += st[z, p, kmb, b] * u_tmp[z+qe]
+        end
+        #= end =#
+        #= end =#
+    end
+    #= end =#
 
 end
 
 function f_kernel_2(r, u, m_work, n_k, n_b, n_e)
-    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-    stride = gridDim().x * blockDim().x
-
-    for i in index:stride:(n_k*n_e)
+    #= index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x =#
+    k = blockIdx().x
+    n = threadIdx().x
+    #= for i in index:stride:(n_k*n_e)
         k, n = divrem(i - 1, n_e)
         k += 1
-        n += 1
-        #= for k in index:stride:n_k
-            for n in 1:n_e =#
-        for b in 1:n_b
-            for i in 1:n_e
-                m_work[n, k, b] += u[i, n, k]' * r[i, n, k, b]
-            end
+        n += 1 =#
+    #= for k in index:stride:n_k
+        for n in 1:n_e =#
+    for b in 1:n_b
+        for i in 1:n_e
+            m_work[n, k, b] += u[i, n, k]' * r[i, n, k, b]
         end
     end
+    #= end =#
     #= end =#
 end
 
@@ -95,23 +113,32 @@ end
     end
 end =#
 
-# function f_kernel_sum(data)
-#     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-#     stride = gridDim().x * blockDim().x
-#     s = 1
-#     while s < length(data)
-#         for i in index:stride:div(length(data) + 1, 2)
-#             idx = (i - 1) * 2s + 1
-#             if idx + s <= length(data)
-#                 data[idx] += data[idx+s]
-#             end
-#         end
-#         sync_threads()
-#         s *= 2
-#     end
-# end
-
 function f_kernel_3(rho_hat, m_work, n_k, n_b, n_e)
+    index = threadIdx().x
+    stride = blockDim().x
+    b, n = divrem(blockIdx().x - 1, n_e)
+    b += 1
+    n += 1
+    s = 1
+    while s < n_k
+        for i in index:stride:div(n_k + 1, 2)
+            idx = (i - 1) * 2s + 1
+            if idx + s <= n_k
+                m_work[n, idx, b] += m_work[n, idx+s, b]
+            end
+        end
+        sync_threads()
+        s *= 2
+    end
+
+    sync_threads()
+    if index == 1
+        rho_hat[n, b] = m_work[n, 1, b]
+    end
+    nothing
+end
+
+#= function f_kernel_3(rho_hat, m_work, n_k, n_b, n_e)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
     s = 1
@@ -143,20 +170,24 @@ function f_kernel_3(rho_hat, m_work, n_k, n_b, n_e)
     end
     return nothing
 end
-
+ =#
 
 function (f::GPUOracleF)(u)
     fill!(f.rho_hat, 0)
     fill!(f.m_work, 0)
     fill!(f.r, 0)
+    n_s = f.n_e
+    n_bar = 1
     @time CUDA.@sync begin
-        @cuda threads = 512 blocks = 20 f_kernel_1(f.s, f.r, u, f.k_plus_b, f.k_minus_b, f.n_k, f.n_b, f.n_e)
+        #= @cuda threads = f.n_e * f.n_e blocks = f.n_k shmem = sizeof(ComplexGPU) * f.n_e * f.n_e f_kernel_1(f.s, f.r, u, f.k_plus_b, f.k_minus_b, f.n_k, f.n_b, f.n_e, f.n_e) =#
+        @cuda threads = f.n_e * n_s blocks = f.n_k * n_bar shmem = sizeof(ComplexGPU) * f.n_e * n_s f_kernel_1(f.s, f.r, u, f.k_plus_b, f.k_minus_b, f.n_k, f.n_b, f.n_e, n_s)
     end
     @time CUDA.@sync begin
-        @cuda threads = 512 blocks = 2 f_kernel_2(f.r, u, f.m_work, f.n_k, f.n_b, f.n_e)
+        @cuda threads = f.n_e blocks = f.n_k f_kernel_2(f.r, u, f.m_work, f.n_k, f.n_b, f.n_e)
     end
     @time CUDA.@sync begin
-        @cuda threads = 512 f_kernel_3(f.rho_hat, f.m_work, f.n_k, f.n_b, f.n_e)
+        #= @cuda threads = 512 f_kernel_3(f.rho_hat, f.m_work, f.n_k, f.n_b, f.n_e) =#
+        @cuda threads = min(f.n_k, 512) blocks = f.n_e * f.n_b f_kernel_3(f.rho_hat, f.m_work, f.n_k, f.n_b, f.n_e)
     end
     #= @time copyto!(f.rho_hat_cpu, view(f.m_work, :, 1, :)) =#
     @time copyto!(f.rho_hat_cpu, f.rho_hat)
@@ -180,56 +211,84 @@ end
 
 struct GPUOracleGradF
     f::GPUOracleF
-    grad_work::Matrix{ComplexF64}
-    grad_omega::Array{ComplexF64,3}
+    grad_work::CuArray{ComplexGPU, 2}
+    grad_omega::CuArray{ComplexGPU,3}
 end
 
 function make_grad_f_gpu(f::GPUOracleF)
-    grad_work = zeros(ComplexF64, f.n_e, f.n_e)
-    grad_omega = zeros(ComplexF64, f.n_e, f.n_e, f.n_k)
+    grad_work = CUDA.zeros(ComplexGPU, f.n_e, f.n_e)
+    grad_omega = CUDA.zeros(ComplexGPU, f.n_e, f.n_e, f.n_k)
     return GPUOracleGradF(f, grad_work, grad_omega)
 end
 
 function anti_symmetrize_gpu!(dst, src)
-    for i in axes(src, 1)
-        for j in axes(src, 2)
-            dst[i, j] = (src[i, j] - src[j, i]') / 2
-        end
-    end
-    return dst
+    i = threadIdx().x
+    j = blockIdx().x
+    #= for i in axes(src, 1)
+        for j in axes(src, 2) =#
+    dst[i, j] = (src[i, j] - src[j, i]') / 2
+    #= end
+    end =#
+    return nothing
 end
 
-function (grad_f::GPUOracleGradF)(u::Array{ComplexF64,3})
+
+function df_kernel_1(rho_hat, r, grad_omega, n_e, n_b)
+    k = blockIdx().x
+    n = threadIdx().x
+    #= for k in 1:n_k =#
+    for b in 1:n_b
+        #= ] = f.rho_hat[:, b] * f.w_list[b] =#
+        #= for n = 1:n_e =#
+        for i = 1:n_e
+            grad_omega[i, n, k] = rho_hat[n, b] * r[i, n, k, b]
+            #= axpy!(rho_hat[n, b], view(f.r, :, n, k, b), view(grad_f.grad_omega, :, n, k)) =#
+        end
+    end
+    #= end
+    end =#
+end
+
+
+
+function (grad_f::GPUOracleGradF)(u)
     f = grad_f.f
     #= grad_f_oracle!(f.r, f.w_list, f.rho_hat, f.n_k, f.n_b, f.n_e, f.Nj, grad_f.grad_omega) =#
     fill!(grad_f.grad_omega, 0)
-    map!(abs, view(f.m_work, :, :, 1), f.rho_hat)
+    map!(abs, view(f.m_work, :, 1, :), f.rho_hat)
     map!(conj, f.rho_hat, f.rho_hat)
-    map!(/, f.rho_hat, f.rho_hat, view(f.m_work, :, :, 1))
+    map!(/, f.rho_hat, f.rho_hat, view(f.m_work, :, 1, :))
 
     for b in 1:f.n_b
         rmul!(view(f.rho_hat, :, b), f.w_list[b])
     end
 
-    Threads.@threads for k in 1:f.n_k
+    #= @cuda threads=f.n_e blocks=f.n_k df_kernel_1(f.rho_hat, f.r, grad_f.grad_omega, f.n_e, f.n_b) =#
+
+    copyto!(f.rho_hat_cpu, f.rho_hat)
+
+    #= println(grad_f.grad_omega) =#
+    for k in 1:f.n_k
         for b in 1:f.n_b
             #= ] = f.rho_hat[:, b] * f.w_list[b] =#
             for n = 1:f.n_e
-                axpy!(f.rho_hat[n, b], view(f.r, :, n, k, b), view(grad_f.grad_omega, :, n, k))
+                axpy!(f.rho_hat_cpu[n, b], view(f.r, :, n, k, b), view(grad_f.grad_omega, :, n, k))
             end
         end
     end
     #= LinearAlgebra.axpy!((-2 / f.n_k), grad_f.grad_omega, grad_f.grad_omega) =#
 
     #= SCDM.project!(UTensor, grad_f.grad_omega, grad_f.grad_work, f.n_k, f.n_e) =#
-    Threads.@threads for k in 1:f.n_k
+    for k in 1:f.n_k
         lmul!(-2 / f.n_k, view(grad_f.grad_omega, :, :, k))
         #= LinearAlgebra.BLAS.gemm!('C', 'N', ComplexF64(1), view(UTensor, :, :, k),
             view(grad_f.grad_omega, :, :, k), ComplexF64(0), grad_f.grad_work)
         grad_f.grad_omega[:, :, k] = grad_f.grad_work - grad_f.grad_work' =#
 
-        BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), view(f.r, :, :, k, 1))
-        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), anti_symmetrize!(view(f.r, :, :, k, 2), view(f.r, :, :, k, 1)))
+        #= CUDA.BLAS.gemm!('C', 'N', ComplexGPU(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexGPU(0), view(f.r, :, :, k, 1)) =#
+        mul!(view(f.r, :, :, k, 1), view(u, :, :, k)', view(grad_f.grad_omega, :, :, k))
+        #= @cuda threads = f.n_e blocks = f.n_e anti_symmetrize_gpu!(view(f.r, :, :, k, 2), view(f.r, :, :, k, 1)) =#
+        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (view(f.r, :, :, k, 1) - view(f.r, :, :, k, 1)')/2)
         #= mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (view(f.r, :, :, k, 1) - view(f.r, :, :, k, 1)')/2) =#
     end
     return grad_f.grad_omega
@@ -238,7 +297,7 @@ end
 function retract_gpu!(u_buffer, u, d_u, t, ::QRRetraction)
     n_e, _, n_k = size(u)
     copy!(u_buffer, u)
-    Threads.@threads for k in 1:n_k
+    for k in 1:n_k
         axpy!(t, view(d_u, :, :, k), view(u_buffer, :, :, k))
         for p = 1:n_e
             norm_p = norm(view(u_buffer, :, p, k))
