@@ -4,7 +4,7 @@ using FortranFiles
 
 function generate_fortran_data(save_dir::String, target_dir::String)
     m, u, w_list, kplusb, Nk, Nb, N = load_problem(save_dir)
-    write_fortran_files(target_dir, m, u, w_list, kplusb, Nk, Nb, N) 
+    write_fortran_files(target_dir, m, u, w_list, kplusb, Nk, Nb, N)
 end
 
 function load_problem(save_dir::String)
@@ -25,14 +25,16 @@ function load_problem(save_dir::String)
     n_k = length(brillouin_zone)
     n_b = length(shell_list)
     k_plus_b = zeros(Int64, n_k, n_b)
+    k_minus_b = zeros(Int64, n_k, n_b)
     for k in brillouin_zone
         for (i, b) in enumerate(shell_list)
             k_plus_b[linear_index(k), i] = linear_index(k + b)
+            k_minus_b[linear_index(k), i] = linear_index(k - b)
         end
     end
 
-    neighbor_integral = neighbor_basis_integral(scheme) 
-    s = zeros(ComplexF64, n_e, n_e,  n_k, n_b)
+    neighbor_integral = neighbor_basis_integral(scheme)
+    s = zeros(ComplexF64, n_e, n_e, n_k, n_b)
     for k in brillouin_zone
         for (i, b) in enumerate(shell_list)
             s[:, :, linear_index(k), i] = neighbor_integral[k, k+b]
@@ -43,16 +45,16 @@ function load_problem(save_dir::String)
     scdm_gauge, _ = scdm_condense_phase(orbital_set_real, collect(1:n_e))
     M_scdm = gauge_transform(neighbor_integral, scdm_gauge)
     println("$(n_e) bands")
-    sum(i->spread(M_scdm, scheme, i, TruncatedConvolution),1:n_e) |> println
+    sum(i -> spread(M_scdm, scheme, i, TruncatedConvolution), 1:n_e) |> println
     u_scdm = zeros(ComplexF64, n_e, n_e, n_k)
     for k in brillouin_zone
         u_scdm[:, :, linear_index(k)] = scdm_gauge[k]
     end
-    return s, u_scdm, w_list, k_plus_b, n_k, n_b, n_e
+    return s, u_scdm, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e
 end
 
 
-function write_fortran_files(target_dir::String, MTensor::Array{ComplexF64, 4}, UTensor::Array{ComplexF64, 3}, w_list::Vector{Float64}, kplusb::Matrix{Int64}, Nk::Int64, Nb::Int64, N::Int64)
+function write_fortran_files(target_dir::String, MTensor::Array{ComplexF64,4}, UTensor::Array{ComplexF64,3}, w_list::Vector{Float64}, kplusb::Matrix{Int64}, Nk::Int64, Nb::Int64, N::Int64)
     f = FortranFile("$(target_dir)/w_list.fdat", "w")
     write(f, w_list)
     close(f)

@@ -1,10 +1,10 @@
 using SCDM, LinearAlgebra, Random, CUDA
 
 src_dir = "./test/scdm_dataset/BaTiO3"
-s, u, w_list, k_plus_b, n_k, n_b, n_e = load_problem(src_dir)
-u = CuArray(u)
+s, u, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e = load_problem(src_dir)
+u = CuArray(Array{ComplexF32, 3}(u))
 
-f_gpu = make_f_gpu(s, w_list, k_plus_b, n_k, n_b, n_e, n_e)
+f_gpu = make_f_gpu(s, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e, n_e)
 grad_f_gpu = make_grad_f_gpu(f_gpu)
 
 Random.seed!(16)
