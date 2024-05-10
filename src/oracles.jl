@@ -78,9 +78,9 @@ function (grad_f::OracleGradF)(u::Array{ComplexF64,3})
     f = grad_f.f
     #= grad_f_oracle!(f.r, f.w_list, f.rho_hat, f.n_k, f.n_b, f.n_e, f.Nj, grad_f.grad_omega) =#
     fill!(grad_f.grad_omega, 0)
-    map!(abs, view(f.m_work, :, :, 1), f.rho_hat)
+    map!(abs, view(f.m_work, :,  1, :), f.rho_hat)
     map!(conj, f.rho_hat, f.rho_hat)
-    map!(/, f.rho_hat, f.rho_hat, view(f.m_work, :, :, 1))
+    map!(/, f.rho_hat, f.rho_hat, view(f.m_work, :, 1, :))
 
     for b in 1:f.n_b
         rmul!(view(f.rho_hat, :, b), f.w_list[b])
@@ -103,8 +103,11 @@ function (grad_f::OracleGradF)(u::Array{ComplexF64,3})
             view(grad_f.grad_omega, :, :, k), ComplexF64(0), grad_f.grad_work)
         grad_f.grad_omega[:, :, k] = grad_f.grad_work - grad_f.grad_work' =#
 
-        BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), view(f.r, :, :, k, 1))
-        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), anti_symmetrize!(view(f.r, :, :, k, 2), view(f.r, :, :, k, 1)))
+        #= BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), view(f.r, :, :, k, 1))
+        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), anti_symmetrize!(view(f.r, :, :, k, 2), view(f.r, :, :, k, 1))) =#
+
+        BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), grad_f.grad_work)
+        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (grad_f.grad_work - grad_f.grad_work') / 2)
         #= mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (view(f.r, :, :, k, 1) - view(f.r, :, :, k, 1)')/2) =#
     end
     return grad_f.grad_omega
