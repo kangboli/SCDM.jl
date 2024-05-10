@@ -181,16 +181,12 @@ function (f::GPUOracleF)(u)
     @time CUDA.@sync begin
         #= @cuda threads = f.n_e * f.n_e blocks = f.n_k shmem = sizeof(ComplexGPU) * f.n_e * f.n_e f_kernel_1(f.s, f.r, u, f.k_plus_b, f.k_minus_b, f.n_k, f.n_b, f.n_e, f.n_e) =#
         @cuda threads = f.n_e * n_s blocks = f.n_k * n_bar shmem = sizeof(ComplexGPU) * f.n_e * n_s f_kernel_1(f.s, f.r, u, f.k_plus_b, f.k_minus_b, f.n_k, f.n_b, f.n_e, n_s)
-    end
-    @time CUDA.@sync begin
         @cuda threads = f.n_e blocks = f.n_k f_kernel_2(f.r, u, f.m_work, f.n_k, f.n_b, f.n_e)
-    end
-    @time CUDA.@sync begin
         #= @cuda threads = 512 f_kernel_3(f.rho_hat, f.m_work, f.n_k, f.n_b, f.n_e) =#
         @cuda threads = min(f.n_k, 512) blocks = f.n_e * f.n_b f_kernel_3(f.rho_hat, f.m_work, f.n_k, f.n_b, f.n_e)
     end
     #= @time copyto!(f.rho_hat_cpu, view(f.m_work, :, 1, :)) =#
-    @time copyto!(f.rho_hat_cpu, f.rho_hat)
+    copyto!(f.rho_hat_cpu, f.rho_hat)
 
     #= for n in 1:f.n_e
         for k in 1:f.n_k
@@ -199,9 +195,9 @@ function (f::GPUOracleF)(u)
             end
         end
     end =#
-    @time lmul!(1 / f.n_k, f.rho_hat_cpu)
+    lmul!(1 / f.n_k, f.rho_hat_cpu)
 
-    @time for b in 1:f.n_b
+    for b in 1:f.n_b
         #= f.omega[b] = 2 * f.w_list[b] * (f.n_e - sum(real, view(f.m_work, :, b))) =#
         f.omega[b] = 2 * f.w_list[b] * (f.n_e - sum(abs.(view(f.rho_hat_cpu, :, b))))
     end
@@ -211,12 +207,12 @@ end
 
 struct GPUOracleGradF
     f::GPUOracleF
-    grad_work::CuArray{ComplexGPU, 2}
+    grad_work::CuArray{ComplexGPU,3}
     grad_omega::CuArray{ComplexGPU,3}
 end
 
 function make_grad_f_gpu(f::GPUOracleF)
-    grad_work = CUDA.zeros(ComplexGPU, f.n_e, f.n_e)
+    grad_work = CUDA.zeros(ComplexGPU, f.n_e, f.n_e, f.n_k)
     grad_omega = CUDA.zeros(ComplexGPU, f.n_e, f.n_e, f.n_k)
     return GPUOracleGradF(f, grad_work, grad_omega)
 end
@@ -241,7 +237,7 @@ function df_kernel_1(rho_hat, r, grad_omega, n_e, n_b)
         #= ] = f.rho_hat[:, b] * f.w_list[b] =#
         #= for n = 1:n_e =#
         for i = 1:n_e
-            grad_omega[i, n, k] = rho_hat[n, b] * r[i, n, k, b]
+            grad_omega[i, n, k] += rho_hat[n, b] * r[i, n, k, b]
             #= axpy!(rho_hat[n, b], view(f.r, :, n, k, b), view(grad_f.grad_omega, :, n, k)) =#
         end
     end
@@ -249,7 +245,25 @@ function df_kernel_1(rho_hat, r, grad_omega, n_e, n_b)
     end =#
 end
 
+function df_kernel_2(grad_work, grad_omega, u, n_e, n_s, n_k)
+    k = blockIdx().x
+    ij = threadIdx().x
+    i, j = divrem(ij - 1, n_s)
+    i += 1
+    j += 1
+    sync_threads()
+    grad_work[i, j, k] = grad_omega[i, j, k] / 2
 
+    for q in 1:n_e
+        for p in 1:n_e
+            grad_work[i, j, k] -= (u[i, p, k] * grad_omega[q, p, k]' * u[q, j, k]) / 2
+        end
+    end
+
+    sync_threads()
+    grad_omega[i, j, k] = grad_work[i, j, k] * (-2 / (n_k))
+    return nothing
+end
 
 function (grad_f::GPUOracleGradF)(u)
     f = grad_f.f
@@ -263,23 +277,22 @@ function (grad_f::GPUOracleGradF)(u)
         rmul!(view(f.rho_hat, :, b), f.w_list[b])
     end
 
-    #= @cuda threads=f.n_e blocks=f.n_k df_kernel_1(f.rho_hat, f.r, grad_f.grad_omega, f.n_e, f.n_b) =#
+    @cuda threads = f.n_e blocks = f.n_k df_kernel_1(f.rho_hat, f.r, grad_f.grad_omega, f.n_e, f.n_b)
 
-    copyto!(f.rho_hat_cpu, f.rho_hat)
+    #= copyto!(f.rho_hat_cpu, f.rho_hat)
 
-    #= println(grad_f.grad_omega) =#
     for k in 1:f.n_k
         for b in 1:f.n_b
-            #= ] = f.rho_hat[:, b] * f.w_list[b] =#
             for n = 1:f.n_e
                 axpy!(f.rho_hat_cpu[n, b], view(f.r, :, n, k, b), view(grad_f.grad_omega, :, n, k))
             end
         end
-    end
+    end =#
     #= LinearAlgebra.axpy!((-2 / f.n_k), grad_f.grad_omega, grad_f.grad_omega) =#
 
     #= SCDM.project!(UTensor, grad_f.grad_omega, grad_f.grad_work, f.n_k, f.n_e) =#
-    for k in 1:f.n_k
+    @time @cuda threads = f.n_e^2 blocks = f.n_k df_kernel_2(grad_f.grad_work, grad_f.grad_omega, u, f.n_e, f.n_e, f.n_k)
+    #= for k in 1:f.n_k
         lmul!(-2 / f.n_k, view(grad_f.grad_omega, :, :, k))
         #= LinearAlgebra.BLAS.gemm!('C', 'N', ComplexF64(1), view(UTensor, :, :, k),
             view(grad_f.grad_omega, :, :, k), ComplexF64(0), grad_f.grad_work)
@@ -288,23 +301,60 @@ function (grad_f::GPUOracleGradF)(u)
         #= CUDA.BLAS.gemm!('C', 'N', ComplexGPU(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexGPU(0), view(f.r, :, :, k, 1)) =#
         mul!(view(f.r, :, :, k, 1), view(u, :, :, k)', view(grad_f.grad_omega, :, :, k))
         #= @cuda threads = f.n_e blocks = f.n_e anti_symmetrize_gpu!(view(f.r, :, :, k, 2), view(f.r, :, :, k, 1)) =#
-        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (view(f.r, :, :, k, 1) - view(f.r, :, :, k, 1)')/2)
+        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (view(f.r, :, :, k, 1) - view(f.r, :, :, k, 1)') / 2)
         #= mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (view(f.r, :, :, k, 1) - view(f.r, :, :, k, 1)')/2) =#
-    end
+    end =#
     return grad_f.grad_omega
 end
+
+function retract_kernel(u_buffer, normsq, n_e)
+    k = blockIdx().x
+    q = threadIdx().x
+
+    for i = 1:n_e
+        normsq[q, k] += abs2(u_buffer[i, q, k])
+    end
+
+    for p = 1:n_e
+        norm_p = normsq[p, k]
+        u_buffer[q, p, k] = u_buffer[q, p, k] / sqrt(norm_p)
+        if q > p
+            r = 0
+            for i = 1:n_e
+                r += u_buffer[i, p, k]' * u_buffer[i, q, k]
+            end
+            for i = 1:n_e
+                u_buffer[i, q, k] -= r * u_buffer[i, p, k]
+            end
+            normsq[q, k] -= abs2(r)
+        end
+        sync_threads()
+    end
+
+end
+
 
 function retract_gpu!(u_buffer, u, d_u, t, ::QRRetraction)
     n_e, _, n_k = size(u)
     copy!(u_buffer, u)
-    for k in 1:n_k
-        axpy!(t, view(d_u, :, :, k), view(u_buffer, :, :, k))
-        for p = 1:n_e
-            norm_p = norm(view(u_buffer, :, p, k))
-            lmul!(1 / norm_p, view(u_buffer, :, p, k))
+    axpy!(t, view(d_u, :, :, :), view(u_buffer, :, :, :))
+    #= normsq = CUDA.zeros(Float32, n_e, n_k)
+    @cuda threads=n_e blocks=n_k retract_kernel(u_buffer, normsq, n_e)
+    nothing =#
+    normsq = zeros(Float32, n_e, n_k)
+    for p = 1:n_e
+        for k in 1:n_k
+            normsq[p, k] = norm(view(u_buffer, :, p, k))^2
+        end
+    end
+    for p = 1:n_e
+        for k in 1:n_k
+            norm_p = normsq[p, k]
+            lmul!(1 / sqrt(norm_p), view(u_buffer, :, p, k))
             for q = p+1:n_e
                 r = dot(view(u_buffer, :, p, k), view(u_buffer, :, q, k))
                 axpy!(-r, view(u_buffer, :, p, k), view(u_buffer, :, q, k))
+                normsq[q, k] -= abs2(r)
             end
         end
     end

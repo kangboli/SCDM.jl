@@ -10,15 +10,15 @@ Random.seed!(16)
 u = zeros(ComplexF64, n_e, n_e, n_k)
 
 for k in 1:n_k
-    #= a = rand(n_e, n_e) =#
-    u[:, :, k] = let (u, _, v) = svd(u[:, :, k])
+    a = rand(n_e, n_e)
+    u[:, :, k] = let (u, _, v) = svd(a)
         u * v'
     end
 end
 
 @time cg(u, f, grad_f, retract!, n_e);
 @time f(u)
-df = grad_f(u);
+df = grad_f(u)
 u_buffer = similar(u);
 retract!(u_buffer, u, df, -0.01, QRRetraction());
 f(u_buffer)

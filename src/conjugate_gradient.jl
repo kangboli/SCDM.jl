@@ -7,7 +7,7 @@ function quadratic_fit_1d(f::Function)
     return b, f(b)
 end
 
-function make_step!(u_buffer, u_tensor::Array{ComplexF64,3}, p_curr, lambda, retract!)
+function make_step!(u_buffer, u_tensor, p_curr, lambda, retract!)
     lambda == 0 && return u_tensor
     retract!(u_buffer, u_tensor, p_curr, float(-lambda), QRRetraction())
     return u_buffer
@@ -24,11 +24,11 @@ function line_search!(u_buffer, u_tensor, f, f_curr, grad_curr, res_curr, step, 
 end
 
 struct Logger
-    timers::Dict{Symbol, Int}
-    evals::Dict{Symbol, Int}
+    timers::Dict{Symbol,Int}
+    evals::Dict{Symbol,Int}
 end
 
-Logger() = Logger(Dict{Symbol, Int}(), Dict{Symbol, Int}())
+Logger() = Logger(Dict{Symbol,Int}(), Dict{Symbol,Int}())
 
 total_time(l::Logger) = sum(values(l.timers))
 
@@ -57,7 +57,7 @@ is evaluated compared to the objective function, which depends on the optimizer.
 Exploring the tradeoff is currently not a priority.
 """
 
-function cg(u::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!, n_band::Int; logger=Logger())
+function cg(u, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!, n_band::Int; logger=Logger())
     n_threads = BLAS.get_num_threads()
     BLAS.set_num_threads(1)
     normsq = x -> norm(x)^2
@@ -66,14 +66,16 @@ function cg(u::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap
     grad_f = record(logger, grad_f_no_wrap!, :grad_f)
     retract! = record(logger, retract_no_wrap!, :retract)
     copy! = record(logger, Base.copy!, :copy)
-    axpy! = record(logger, LinearAlgebra.BLAS.axpy!, :axpy)
+    #= axpy! = record(logger, LinearAlgebra.BLAS.axpy!, :axpy) =#
     normsq = record(logger, normsq, :normsq)
     f_prev, grad_prev = f(u), grad_f(u)
     res_prev = normsq(grad_prev)
-    p_prev = zeros(ComplexF64, size(u))
-    u_buffer = zeros(ComplexF64, size(u))
+    p_prev = similar(u)
+    fill!(p_prev, 0)
+    u_buffer = similar(u)
+    fill!(u_buffer, 0)
     iter = 0
-    lambda_prev = 1 
+    lambda_prev = 1
     #= println(res_prev) =#
     f_curr = f_prev
     start = time_ns()
@@ -114,10 +116,10 @@ function cg(u::Array{ComplexF64,3}, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap
     println("value:   ", f_curr)
     println("iter:    ", iter)
     println("f_eval:  ", logger.evals[:f])
-    println("f:       ",  logger.timers[:f] / 1e9)
+    println("f:       ", logger.timers[:f] / 1e9)
     println("grad_f:  ", logger.timers[:grad_f] / 1e9)
     println("retract: ", logger.timers[:retract] / 1e9)
-    println("axpy:    ", logger.timers[:axpy] / 1e9)
+    #= println("axpy:    ", logger.timers[:axpy] / 1e9) =#
     println("copy:    ", logger.timers[:copy] / 1e9)
     println("normsq:  ", logger.timers[:normsq] / 1e9)
     println("compute: ", total_time(logger) / 1e9)

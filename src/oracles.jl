@@ -1,4 +1,4 @@
-export OracleF, OracleGradF, make_f, make_grad_f, retract!
+export OracleF, OracleGradF, make_f, make_grad_f, retract!, QRRetraction, SVDRetraction
 
 struct OracleF
     s::Array{ComplexF64,4}
@@ -105,9 +105,10 @@ function (grad_f::OracleGradF)(u::Array{ComplexF64,3})
 
         #= BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), view(f.r, :, :, k, 1))
         mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), anti_symmetrize!(view(f.r, :, :, k, 2), view(f.r, :, :, k, 1))) =#
+        thread_work = zeros(ComplexF64, f.n_e, f.n_e)
 
-        BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), grad_f.grad_work)
-        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (grad_f.grad_work - grad_f.grad_work') / 2)
+        BLAS.gemm!('C', 'N', ComplexF64(1), view(u, :, :, k), view(grad_f.grad_omega, :, :, k), ComplexF64(0), thread_work)
+        mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (thread_work - thread_work') / 2)
         #= mul!(view(grad_f.grad_omega, :, :, k), view(u, :, :, k), (view(f.r, :, :, k, 1) - view(f.r, :, :, k, 1)')/2) =#
     end
     return grad_f.grad_omega
