@@ -11,6 +11,7 @@ struct GPUOracleF
     n_e::Int64
     n_j::Int64
     r::CuArray{ComplexF64,4}
+    rho_hat_cpu::Array{ComplexF64,2}
     rho_hat::CuArray{ComplexF64,2}
     omega::Vector{Float64}
     m_work::CuArray{ComplexF64,3}
@@ -18,27 +19,31 @@ end
 
 function make_f_gpu(s, w_list, kplusb, n_k, n_b, n_e, n_j)
     r = CUDA.zeros(ComplexF64, size(s))
+    rho_hat_cpu = zeros(ComplexF64, n_e, n_b)
     rho_hat = CUDA.zeros(ComplexF64, n_e, n_b)
     omega = zeros(Float64, n_b)
     m_work = CUDA.zeros(ComplexF64, n_e, n_k, n_b)
-    GPUOracleF(s, w_list, kplusb, n_k, n_b, n_e, n_j, r, rho_hat, omega, m_work)
+    GPUOracleF(s, w_list, kplusb, n_k, n_b, n_e, n_j, r, rho_hat_cpu, rho_hat, omega, m_work)
 end
 
 function f_kernel_1(s, r, u, k_plus_b, n_k, n_b, n_e)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
-    for i in index:stride:(n_k*n_e)
-        k = div(i - 1, n_e) + 1
-        p = mod(i - 1, n_e) + 1
+    n_e2 = n_e^2
+    for i in index:stride:(n_k*n_e2)
+        k = div(i - 1, n_e2) + 1
+        pq = mod(i - 1, n_e2) + 1
+        p = div(pq - 1, n_e) + 1
+        q = rem(pq - 1, n_e) + 1
         #= end
         for k in index:stride:n_k
             for p in 1:n_e =#
         for z in 1:n_e
-            for b in 1:n_b
-                for q in 1:n_e
+            #= for q in 1:n_e =#
+                for b in 1:n_b
                     r[p, q, k, b] += s[p, z, k, b] * u[z, q, k_plus_b[k, b]]
                 end
-            end
+            #= end =#
             #= end =#
         end
     end
@@ -89,31 +94,37 @@ function f_kernel_sum(data)
     end
 end
 
-function f_kernel_3(data, n_k, n_b, n_e)
+function f_kernel_3(rho_hat, m_work, n_k, n_b, n_e)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
     s = 1
     n_be = n_b * n_e
     k_stride = div(stride, n_be)
     if index > k_stride * n_be
-        return 
+        return nothing
     end
     k_half = div(n_k + 1, 2)
     k_index = div(index - 1, n_be) + 1
-    bn = rem(index-1, n_be) + 1
-    b = div(bn-1, n_e) + 1
-    n = rem(index-1, n_e) + 1
+    bn = rem(index - 1, n_be) + 1
+    b = div(bn - 1, n_e) + 1
+    n = rem(index - 1, n_e) + 1
 
     while s < n_k
         for i in k_index:k_stride:k_half
             idx = (i - 1) * 2s + 1
             if idx + s <= n_k
-                data[n, idx, b] += data[n, idx+s, b]
+                m_work[n, idx, b] += m_work[n, idx+s, b]
             end
         end
         sync_threads()
         s *= 2
     end
+
+    sync_threads()
+    if k_index == 1
+        rho_hat[n, b] = m_work[n, 1, b]
+    end
+    return nothing
 end
 
 
@@ -121,33 +132,15 @@ function (f::GPUOracleF)(u)
     fill!(f.rho_hat, 0)
     fill!(f.m_work, 0)
     fill!(f.r, 0)
-    @time @cuda threads = 256 f_kernel_1(f.s, f.r, u, f.k_plus_b, f.n_k, f.n_b, f.n_e)
-    @time @cuda threads = 256 f_kernel_2(f.r, u, f.m_work, f.n_k, f.n_b, f.n_e)
-    #= for k in 1:f.n_k
-        for b in 1:f.n_b
-            mul!(view(f.r, :, :, k, b), view(f.s, :, :, k, b), view(u, :, :, f.k_plus_b[k, b]))
-        end
-        for n in 1:f.n_e
-            for b in 1:f.n_b
-                f.m_work[n, k, b] = dot(view(u, :, n, k), view(f.r, :, n, k, b))
-            end
-        end
-    end =#
-
-    #= p = CUDA.ones(Float64, 27)
-    @cuda f_kernel_sum(p)
-    println(p) =#
-
-    #= @time for n in 1:f.n_e
-        for b in 1:f.n_b
-            @cuda f_kernel_sum(view(f.m_work, n, :, b))
-        end
+    @time CUDA.@sync begin
+        @cuda threads = 512 blocks = 6 f_kernel_1(f.s, f.r, u, f.k_plus_b, f.n_k, f.n_b, f.n_e)
     end
-    copyto!(f.rho_hat, view(f.m_work, :, 1, :)) =#
-    #
-    #= @time copyto!(f.rho_hat, sum(f.m_work, dims=2)) =#
-    @time @cuda threads=256 f_kernel_3(f.m_work, f.n_k, f.n_b, f.n_e)
-    copyto!(f.rho_hat, view(f.m_work, :, 1, :))
+    @time CUDA.@sync begin
+        @cuda threads = 512 blocks = 2 f_kernel_2(f.r, u, f.m_work, f.n_k, f.n_b, f.n_e)
+        @cuda threads = 512 f_kernel_3(f.rho_hat, f.m_work, f.n_k, f.n_b, f.n_e)
+    end
+    #= @time copyto!(f.rho_hat_cpu, view(f.m_work, :, 1, :)) =#
+    @time copyto!(f.rho_hat_cpu, f.rho_hat)
 
     #= for n in 1:f.n_e
         for k in 1:f.n_k
@@ -156,11 +149,11 @@ function (f::GPUOracleF)(u)
             end
         end
     end =#
-    @time lmul!(1 / f.n_k, f.rho_hat)
+    @time lmul!(1 / f.n_k, f.rho_hat_cpu)
 
     @time for b in 1:f.n_b
         #= f.omega[b] = 2 * f.w_list[b] * (f.n_e - sum(real, view(f.m_work, :, b))) =#
-        f.omega[b] = 2 * f.w_list[b] * (f.n_e - sum(abs.(view(f.rho_hat, :, b))))
+        f.omega[b] = 2 * f.w_list[b] * (f.n_e - sum(abs.(view(f.rho_hat_cpu, :, b))))
     end
 
     return sum(f.omega)

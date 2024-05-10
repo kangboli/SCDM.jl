@@ -1,4 +1,4 @@
-using SCDM, LinearAlgebra, Random, Profile
+using SCDM, LinearAlgebra, Random, CUDA
 
 src_dir = "./test/scdm_dataset/BaTiO3"
 s, u, w_list, k_plus_b, n_k, n_b, n_e = load_problem(src_dir)
@@ -17,7 +17,7 @@ for k in 1:n_k
     end
 end
 
-@time f_gpu(u)
+f_gpu(u)
 
 @time cg(u, f_gpu, grad_f_gpu, retract!, n_e);
 @time grad_f(u);
