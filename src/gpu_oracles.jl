@@ -350,51 +350,91 @@ end
 
 function retract_kernel(u_buffer, u_buffer_copy, normsq, n_e)
     k = blockIdx().x
-    q = threadIdx().x
+    q, i = divrem(threadIdx().x - 1, n_e)
+    q += 1
+    i += 1
 
-    for i = 1:n_e
-        normsq[q, k] += abs2(u_buffer[i, q, k])
+    u_tmp = CuDynamicSharedArray(ComplexGPU, 2n_e*n_e)
+    u_tmp[i+(q-1)*n_e] = u_buffer[i, q, k]
+
+    sync_threads()
+
+    # for i = 1:n_e
+    # if i == 1
+    # for j = 1:n_e
+    #     # normsq[q, k] += abs2(u_buffer[j, q, k])
+    #     normsq[q, k] += abs2(u_tmp[j+(q-1)*n_e])
+    # end
+    # end
+    u_tmp[i+(q-1)*n_e + n_e^2] = abs2(u_tmp[i+(q-1)*n_e])
+    s = 1
+    while s < n_e
+        # for i in index:stride:div(n_e + 1, 2)
+        idx = (i - 1) * 2s + 1
+        if idx + s <= n_e
+            u_tmp[idx+(q-1)*n_e + n_e^2] += u_tmp[idx+s+(q-1)*n_e + n_e^2]
+        end
+        # end
+        sync_threads()
+        s *= 2
     end
+    normsq[q, k] = u_tmp[1+(q-1)*n_e + n_e^2]
+    # sync_threads()
+    # u_tmp[i+(q-1)*n_e] = u_buffer[i, q, k]
+    sync_threads()
+    # end
     for p = 1:n_e
         norm_p = normsq[p, k]
-        u_buffer[q, p, k] = u_buffer[q, p, k] / sqrt(norm_p)
-        if q > p
-            r = 0
-            for i = 1:n_e
-                r += u_buffer[i, p, k]' * u_buffer[i, q, k]
+        # u_buffer[q, p, k] = u_buffer[q, p, k] / sqrt(norm_p)
+        u_tmp[q+(p-1)*n_e, k] = u_tmp[q+(p-1)*n_e] / sqrt(norm_p)
+        sync_threads()
+        # u_buffer_copy[i, q, k] = u_buffer[i, p, k]' * u_buffer[i, q, k]
+        u_buffer_copy[i, q, k] = u_tmp[i+(p-1)*n_e]' * u_tmp[i+(q-1)*n_e]
+        # for i = 1:n_e
+        #     r += u_buffer[i, p, k]' * u_buffer[i, q, k]
+        # end
+        sync_threads()
+        # r = 0
+        # for j = 1:n_e
+        #     r += u_buffer_copy[j, q, k]
+        # end
+        s = 1
+        while s < n_e
+            # for i in index:stride:div(n_e + 1, 2)
+            idx = (i - 1) * 2s + 1
+            if idx + s <= n_e
+                u_buffer_copy[idx, q, k] += u_buffer_copy[idx+s, q, k]
             end
-
-            # s = 1
-            # while s < n_e
-            #     for i in index:stride:div(n_e + 1, 2)
-            #         idx = (i - 1) * 2s + 1
-            #         if idx + s <= n_e
-            #             u_buffer_copy[idx, p, k] += u_buffer_copy[idx+s, p, k]
-            #         end
-            #     end
-            #     sync_threads()
-            #     s *= 2
             # end
-
-            for i = 1:n_e
-                u_buffer[i, q, k] -= r * u_buffer[i, p, k]
-            end
+            sync_threads()
+            s *= 2
+        end
+        r = u_buffer_copy[1, q, k]
+        if q <= p
+            r = 0
+        end
+        sync_threads()
+        u_tmp[i+(q-1)*n_e] -= r * u_tmp[i+(p-1)*n_e]
+        if i == 1
             normsq[q, k] -= abs2(r)
         end
         sync_threads()
     end
 
+    u_buffer[i, q, k] = u_tmp[i+(q-1)*n_e]
+    return nothing
 end
 
 
 function retract_gpu!(u_buffer, u, d_u, t, ::QRRetraction)
     n_e, _, n_k = size(u)
     copy!(u_buffer, u)
-    # u_buffer_copy = copy(u_buffer)
+    u_buffer_copy = CUDA.zeros(ComplexGPU, n_e, n_e, n_k)
     axpy!(t, view(d_u, :, :, :), view(u_buffer, :, :, :))
     CUDA.@sync begin
         normsq = CUDA.zeros(Float32, n_e, n_k)
-        @cuda threads = n_e blocks = n_k retract_kernel(u_buffer, u_buffer, normsq, n_e)
+        # normsq = mapreduce(+, abs2, u_buffer, dims=1)
+        @cuda threads = n_e^2 blocks = n_k shmem = sizeof(ComplexGPU) * 2n_e^2 retract_kernel(u_buffer, u_buffer_copy, normsq, n_e)
     end
     nothing
     # normsq = zeros(Float32, n_e, n_k)

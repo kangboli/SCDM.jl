@@ -13,8 +13,6 @@ u_buffer_gpu = similar(u_gpu);
 retract_gpu!(u_buffer_gpu, u_gpu, df_gpu, -0.1, QRRetraction())
 f_gpu(u_buffer_gpu)
 
-Random.seed!(16)
-u_gpu = CUDA.zeros(ComplexF64, n_e, n_e, n_k)
 
 @time u_cp = Array(u_buffer_gpu);
 @time begin
@@ -27,6 +25,8 @@ end
 
 @time map(abs2, u_buffer_gpu);
 
+Random.seed!(16)
+u_gpu = CUDA.zeros(ComplexF64, n_e, n_e, n_k)
 for k in 1:n_k
     a = rand(n_e, n_e)
     u_gpu[:, :, k] = let (u, _, v) = svd(a)
@@ -35,4 +35,5 @@ for k in 1:n_k
 end
 
 @time cg(u_gpu, f_gpu, grad_f_gpu, retract_gpu!, n_e);
+CUDA.@profile cg(u_gpu, f_gpu, grad_f_gpu, retract_gpu!, n_e);
 @profview cg(u, f, grad_f, n_e, n_k);
