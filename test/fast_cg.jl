@@ -20,7 +20,7 @@ end
 @time f(u)
 df = grad_f(u)
 u_buffer = similar(u);
-retract!(u_buffer, u, df, -0.01, QRRetraction());
+retract!(u_buffer, u, df, -0.1, QRRetraction());
 f(u_buffer)
 @time grad_f(u);
 @profview cg(u, f, grad_f, n_e, n_k);

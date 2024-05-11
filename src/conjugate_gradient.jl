@@ -60,16 +60,15 @@ Exploring the tradeoff is currently not a priority.
 function cg(u, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!, n_band::Int; logger=Logger())
     n_threads = BLAS.get_num_threads()
     BLAS.set_num_threads(1)
-    normsq = x -> norm(x)^2
     n_k = size(u, 3)
     f = record(logger, f_no_wrap!, :f)
     grad_f = record(logger, grad_f_no_wrap!, :grad_f)
     retract! = record(logger, retract_no_wrap!, :retract)
     copy! = record(logger, Base.copy!, :copy)
     #= axpy! = record(logger, LinearAlgebra.BLAS.axpy!, :axpy) =#
-    normsq = record(logger, normsq, :normsq)
+    norm = record(logger, LinearAlgebra.norm, :norm)
     f_prev, grad_prev = f(u), grad_f(u)
-    res_prev = normsq(grad_prev)
+    res_prev = norm(grad_prev)^2
     p_prev = similar(u)
     fill!(p_prev, 0)
     u_buffer = similar(u)
@@ -82,7 +81,7 @@ function cg(u, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!, n_band::Int; logge
 
     while res_prev / (n_k * n_band^2) > 1e-7
         grad_curr = grad_f(u)
-        res_curr = normsq(grad_curr)
+        res_curr = norm(grad_curr)^2
         # The fletcher reeves 
         beta = rem(iter, n_band^2) == 0 ? 0 : res_curr / res_prev
         p_curr = grad_curr
@@ -108,7 +107,9 @@ function cg(u, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!, n_band::Int; logge
         f_prev = f_curr
         copy!(p_prev, p_curr)
         res_prev = res_curr
-        @printf "f_curr: %.3f, lambda: %.3e, res: %.3e\n" f_curr lambda_curr res_curr
+        if mod(iter, 10) == 0
+            @printf "iter: %d, f_curr: %.3f, lambda: %.3e, res: %.3e\n" iter f_curr lambda_curr res_curr
+        end
         iter += 1
     end
     finish = time_ns()
@@ -121,7 +122,8 @@ function cg(u, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!, n_band::Int; logge
     println("retract: ", logger.timers[:retract] / 1e9)
     #= println("axpy:    ", logger.timers[:axpy] / 1e9) =#
     println("copy:    ", logger.timers[:copy] / 1e9)
-    println("normsq:  ", logger.timers[:normsq] / 1e9)
+    println("norm:    ", logger.timers[:norm] / 1e9)
+    println("n_norm:  ", logger.evals[:norm])
     println("compute: ", total_time(logger) / 1e9)
     println("wall:    ", (finish - start) / 1e9)
     return u
