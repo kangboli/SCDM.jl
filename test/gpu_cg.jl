@@ -25,4 +25,4 @@ end
 
 
 @time cg(u_gpu, f_gpu, grad_f_gpu, retract_gpu!, n_e);
-@profview cg(u, f, grad_f, n_e, n_k);
+
