@@ -1,7 +1,7 @@
 using SCDM, LinearAlgebra, Random, Profile
 
 src_dir = "./test/scdm_dataset/BaTiO3"
-s, u, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e = load_problem(src_dir)
+s, u, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e = load_problem(src_dir, collect(12:20))
 
 f = make_f(s, w_list, k_plus_b, n_k, n_b, n_e, n_e)
 grad_f = make_grad_f(f)
