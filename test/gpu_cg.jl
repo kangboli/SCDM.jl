@@ -9,7 +9,7 @@ grad_f_gpu = make_grad_f_gpu(f_gpu)
 
 CUDA.@time f_gpu(u_gpu)
 CUDA.@profile trace=true f_gpu(u_gpu)
-df_gpu = grad_f_gpu(u_gpu);
+@time df_gpu = grad_f_gpu(u_gpu);
 u_buffer_gpu = similar(u_gpu);
 retract_gpu!(u_buffer_gpu, u_gpu, df_gpu, -0.04, QRRetraction())
 f_gpu(u_buffer_gpu)
@@ -23,7 +23,6 @@ for k in 1:n_k
         u * v'
     end
 end
-
 
 @time cg(u_gpu, f_gpu, grad_f_gpu, retract_gpu!, n_e);
 
