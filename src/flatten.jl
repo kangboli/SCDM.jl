@@ -7,9 +7,13 @@ function generate_fortran_data(save_dir::String, target_dir::String)
     write_fortran_files(target_dir, m, u, w_list, kplusb, Nk, Nb, N)
 end
 
-function load_problem(save_dir::String)
+function load_problem(save_dir::String, bands=nothing)
     wave_functions_list = wave_functions_from_directory(joinpath(save_dir, "aiida.save"))
-    orbital_set = orbital_set_from_save(wave_functions_list)
+    if bands === nothing
+        orbital_set = orbital_set_from_save(wave_functions_list, domain_scaling_factor=1)
+    else
+        orbital_set = orbital_set_from_save(wave_functions_list, bands=bands, domain_scaling_factor=1)
+    end
     n_e = n_band(orbital_set)
     _, brillouin_zone = i_kpoint_map(wave_functions_list)
     scheme = CosScheme3D(orbital_set)
@@ -50,7 +54,7 @@ function load_problem(save_dir::String)
     for k in brillouin_zone
         u_scdm[:, :, linear_index(k)] = scdm_gauge[k]
     end
-    return s, u_scdm, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e
+    return s, u_scdm, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e, shell_list
 end
 
 
