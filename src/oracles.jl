@@ -1,4 +1,4 @@
-export OracleF, OracleGradF, make_f, make_grad_f, qr_retract!, svd_retract!, exp_retract!, peak_centers, peak_spreads, random_gauge
+export OracleF, OracleGradF, make_f, make_grad_f, qr_retract!, svd_retract!, exp_retract!, peek_centers, peek_spreads, random_gauge
 
 mutable struct OracleF
     s::Array{ComplexF64,4}
@@ -57,7 +57,7 @@ function (f::OracleF)(u::Array{ComplexF64,3})
     return sum(f.omega)
 end
 
-function peak_centers(f::OracleF)
+function peek_centers(f::OracleF)
     phase = dropdims(sum(f.m_work, dims=2), dims=2)
     lmul!(1 / f.n_k, phase)
     map!(angle, phase, phase)
@@ -71,7 +71,7 @@ function peak_centers(f::OracleF)
     return centers
 end
 
-function peak_spreads(f::OracleF)
+function peek_spreads(f::OracleF)
     spreads = zeros(Float64, f.n_e)
 
     for n in 1:f.n_e
