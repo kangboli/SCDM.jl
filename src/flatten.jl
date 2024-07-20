@@ -1,4 +1,4 @@
-export generate_fortran_data, load_problem, write_fortran_files
+export generate_fortran_data, load_problem, write_fortran_files, identity_gauge, scdm_gauge
 
 using FortranFiles
 
@@ -7,8 +7,15 @@ function generate_fortran_data(save_dir::String, target_dir::String)
     write_fortran_files(target_dir, m, u, w_list, kplusb, Nk, Nb, N)
 end
 
+"""
+    load_problem(save_dir, bands=nothing)
+
+This function loads from a `.save` directory and returns a number of tensors.
+It loosely correspond to `pw2wannier.x`.
+
+"""
 function load_problem(save_dir::String, bands=nothing)
-    wave_functions_list = wave_functions_from_directory(joinpath(save_dir, "aiida.save"))
+    wave_functions_list = wave_functions_from_directory(save_dir)
     if bands === nothing
         orbital_set = orbital_set_from_save(wave_functions_list, domain_scaling_factor=1)
     else
@@ -32,8 +39,10 @@ function load_problem(save_dir::String, bands=nothing)
     k_minus_b = zeros(Int64, n_k, n_b)
     for k in brillouin_zone
         for (i, b) in enumerate(shell_list)
-            k_plus_b[linear_index(k), i] = linear_index(k + b)
-            k_minus_b[linear_index(k), i] = linear_index(k - b)
+            #= k_plus_b[linear_index(k), i] = linear_index(k + b)
+            k_minus_b[linear_index(k), i] = linear_index(k - b) =#
+            k_plus_b[linear_index(k), i] = linear_index(reset_overflow(k + b))
+            k_minus_b[linear_index(k), i] = linear_index(reset_overflow(k - b))
         end
     end
 
@@ -45,16 +54,35 @@ function load_problem(save_dir::String, bands=nothing)
         end
     end
 
-    orbital_set_real = ifft(orbital_set)
+    #= orbital_set_real = ifft(orbital_set)
     scdm_gauge, _ = scdm_condense_phase(orbital_set_real, collect(1:n_e))
     M_scdm = gauge_transform(neighbor_integral, scdm_gauge)
     println("$(n_e) bands")
-    sum(i -> spread(M_scdm, scheme, i, TruncatedConvolution), 1:n_e) |> println
+    sum(i -> spread(M_scdm, scheme, i, TruncatedConvolution), 1:n_e) |> println =#
+    #= return s, u_init, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e, hcat(coordinates.(shell_list)...) =#
+    shell_list = hcat(coordinates.(shell_list)...)
+    return make_f(s, w_list, shell_list, k_plus_b, k_minus_b, n_k, n_b, n_e, n_e), orbital_set
+end
+
+function scdm_gauge(orbital_set)
+    n_e = n_band(orbital_set)
+    brillouin_zone = grid(orbital_set)
+    n_k = length(brillouin_zone)
+    orbital_set_real = ifft(orbital_set)
+    scdm_gauge, _ = scdm_condense_phase(orbital_set_real, collect(1:n_e))
     u_scdm = zeros(ComplexF64, n_e, n_e, n_k)
     for k in brillouin_zone
         u_scdm[:, :, linear_index(k)] = scdm_gauge[k]
     end
-    return s, u_scdm, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e, shell_list
+    return u_scdm
+end
+
+function identity_gauge(f::OracleF)
+    u_init = zeros(ComplexF64, f.n_e, f.n_e, f.n_k)
+    for k in 1:f.n_k
+        u_init[:, :, k] = Diagonal(ones(ComplexF64, f.n_e))
+    end
+    return u_init
 end
 
 

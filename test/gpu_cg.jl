@@ -1,6 +1,6 @@
 using SCDM, LinearAlgebra, Random, CUDA
 
-src_dir = "./test/scdm_dataset/BaTiO3"
+src_dir = "./test/scdm_dataset/BaTiO3/aiida.save"
 s, u_gpu, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e = load_problem(src_dir)
 u_gpu = CuArray(Array{ComplexF32, 3}(u_gpu))
 

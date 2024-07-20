@@ -6,17 +6,18 @@ wave_functions_list = wave_functions_from_directory(joinpath(src_dir, "aiida.sav
 k_map, brillouin_zone = i_kpoint_map(wave_functions_list)
 mmn = MMN(joinpath(src_dir, "aiida.mmn"))
 ki = NeighborIntegral(mmn, k_map)
-s, u, w_list, k_plus_b, k_minus_b, n_k, n_b, n_e, shell_list = load_problem(src_dir)
+f, orbital_set = load_problem(joinpath(src_dir, "aiida.save"))
+scheme = CosScheme3D(orbital_set; integrate=false)
 for k in brillouin_zone
-    for (i, b) in enumerate(shell_list)
-        s[:, :, linear_index(k), i] = ki[k, k + b]
+    for (i, b) in enumerate(vcat(shells(scheme)...))
+        f.s[:, :, linear_index(k), i] = ki[k, k + b]
     end
 end
 
-f = make_f(s, w_list, k_plus_b, n_k, n_b, n_e, n_e)
+#= f = make_f(s, w_list, k_plus_b, n_k, n_b, n_e, n_e) =#
 grad_f = make_grad_f(f)
 
-Random.seed!(16)
+#= Random.seed!(16)
 u = zeros(ComplexF64, n_e, n_e, n_k)
 
 for k in 1:n_k
@@ -24,9 +25,9 @@ for k in 1:n_k
     u[:, :, k] = let (u, _, v) = svd(a)
         u * v'
     end
-end
+end =#
 
-@time cg(u, f, grad_f, retract!, n_e);
+@time cg(random_gauge(f), f, grad_f, qr_retract!);
 
 
 #= orbital_set = orbital_set_from_save(wave_functions_list, domain_scaling_factor=1)

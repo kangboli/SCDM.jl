@@ -65,14 +65,14 @@ julia> length(shells(scheme))
 1
 ```
 """
-function CosScheme3D(u::OrbitalSet{UnkBasisOrbital{ReciprocalLattice3D}}, n_shells = 1)
+function CosScheme3D(u::OrbitalSet{UnkBasisOrbital{ReciprocalLattice3D}}, n_shells = 1; integrate=true)
     neighbor_shells = find_shells(grid(u), n_shells)
     weights = compute_weights(neighbor_shells)
-    weights === nothing && return CosScheme3D(u, n_shells + 1)
+    weights === nothing && return CosScheme3D(u, n_shells + 1; integrate=integrate)
     neighbor_integral = NeighborIntegral()
 
     scheme = CosScheme3D(neighbor_shells, weights, neighbor_integral)
-    populate_integral_table!(scheme, u)
+    integrate && populate_integral_table!(scheme, u)
     return scheme
 end
 

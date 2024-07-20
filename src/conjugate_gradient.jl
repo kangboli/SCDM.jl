@@ -9,7 +9,7 @@ end
 
 function make_step!(u_buffer, u_tensor, p_curr, lambda, retract!)
     lambda == 0 && return u_tensor
-    retract!(u_buffer, u_tensor, p_curr, float(-lambda), QRRetraction())
+    retract!(u_buffer, u_tensor, p_curr, float(-lambda))
     return u_buffer
 end
 
@@ -57,10 +57,10 @@ is evaluated compared to the objective function, which depends on the optimizer.
 Exploring the tradeoff is currently not a priority.
 """
 
-function cg(u, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!, n_band::Int; logger=Logger())
+function cg(u, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!; logger=Logger())
     n_threads = BLAS.get_num_threads()
     BLAS.set_num_threads(1)
-    n_k = size(u, 3)
+    n_e, _, n_k = size(u)
     f = record(logger, f_no_wrap!, :f)
     grad_f = record(logger, grad_f_no_wrap!, :grad_f)
     retract! = record(logger, retract_no_wrap!, :retract)
@@ -76,14 +76,14 @@ function cg(u, f_no_wrap!, grad_f_no_wrap!, retract_no_wrap!, n_band::Int; logge
     iter = 0
     lambda_prev = 1
     #= println(res_prev) =#
-    f_curr = f_prev
+    f_curr = f(u)
     start = time_ns()
 
-    while res_prev / (n_k * n_band^2) > 1e-7
+    while res_prev / (n_k * n_e^2) > 1e-9
         grad_curr = grad_f(u)
         res_curr = norm(grad_curr)^2
         # The fletcher reeves 
-        beta = rem(iter, n_band^2) == 0 ? 0 : res_curr / res_prev
+        beta = rem(iter, n_e^2) == 0 ? 0 : res_curr / res_prev
         p_curr = grad_curr
         axpy!(beta, p_prev, p_curr)
 

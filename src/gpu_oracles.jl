@@ -1,6 +1,6 @@
 using LinearAlgebra
 using CUDA
-export GPUOracleF, GPUOracleGradF, make_f_gpu, make_grad_f_gpu, retract_gpu!
+export GPUOracleF, GPUOracleGradF, make_f_gpu, make_grad_f_gpu, qr_retract_gpu!, exp_retract_gpu!, svd_retract_gpu!
 
 const ComplexGPU = ComplexF32
 
@@ -505,7 +505,7 @@ function retract_kernel(u_buffer, u, d_u, t, n_e)
 end
 
 
-function retract_gpu!(u_buffer, u, d_u, t, ::QRRetraction)
+function qr_retract_gpu!(u_buffer, u, d_u, t)
     n_e, _, n_k = size(u)
     # copy!(u_buffer, u)
     #= @time axpy!(t, view(d_u, :, :, :), view(u_buffer, :, :, :)) =#
@@ -521,7 +521,7 @@ function retract_gpu!(u_buffer, u, d_u, t, ::QRRetraction)
     nothing
 end
 
-function retract_gpu!(u_buffer, u, d_u, t, ::SVDRetraction)
+function svd_retract_gpu!(u_buffer, u, d_u, t)
     Nk = size(u, 3)
     copy!(u_buffer, u)
     axpy!(t, d_u, u_buffer)
@@ -531,7 +531,7 @@ function retract_gpu!(u_buffer, u, d_u, t, ::SVDRetraction)
     end
 end
 
-function retract_gpu!(u_buffer, u, d_u, t, ::ExpRetraction)
+function exp_retract_gpu!(u_buffer, u, d_u, t)
     Nk = size(u, 3)
 
     for k in 1:Nk

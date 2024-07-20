@@ -98,7 +98,7 @@ function center(M::NeighborIntegral, scheme::CosScheme, n::Int, ::Type{Truncated
         sum(unique(k -> Set([k, -k]), shell)) do b
             ϕ⁺, ϕ⁻ = phase(b), phase(-b)
             branch = (sign(ϕ⁺) == sign(ϕ⁻) ? -1 : 1)
-            w * coordinates(b) * ϕ⁺ + w * cartesian(-b) * branch * ϕ⁻
+            w * coordinates(b) * ϕ⁺ + w * coordinates(-b) * branch * ϕ⁻
         end
     end
 end
@@ -109,7 +109,7 @@ function center(M::NeighborIntegral, scheme::CosScheme, n::Int, ::Type{BranchSta
             ϕ⁺ = M[k, k+b][n, n] |> angle
             ϕ⁻ = M[k, k-b][n, n] |> angle
             branch = (sign(ϕ⁺) == sign(ϕ⁻) ? -1 : 1)
-            w * coordinates(b) * ϕ⁺ + w * cartesian(-b) * branch * ϕ⁻
+            w * coordinates(b) * ϕ⁺ + w * coordinates(-b) * branch * ϕ⁻
         end
     end
 
