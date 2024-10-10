@@ -11,6 +11,7 @@ include("oracles.jl")
 include("gpu_oracles.jl")
 include("flatten.jl")
 include("conjugate_gradient.jl")
+include("oracles_mv.jl")
 #= include("oracle_wrapper.jl") =#
 #= include("Manopt.jl") =#
 #= include("AmateurOptimizers.jl") =#

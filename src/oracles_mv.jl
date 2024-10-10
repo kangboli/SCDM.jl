@@ -1,8 +1,6 @@
-export OracleF, OracleGradF, make_f, make_grad_f, qr_retract!, svd_retract!, exp_retract!, peek_centers, peek_spreads, random_gauge
+export OracleF, OracleGradF, make_f, make_grad_f, qr_retract!, svd_retract!, exp_retract!, peek_centers, peek_spreads, random_gauge, as_mv
 
-abstract type AbstractOracleF end
-
-mutable struct OracleF <: AbstractOracleF
+mutable struct OracleMVF <: AbstractOracleF
     s::Array{ComplexF64,4}
     w_list::Vector{Float64}
     shell_list::Matrix{Float64}
@@ -19,15 +17,9 @@ mutable struct OracleF <: AbstractOracleF
     gradient_ready::Bool
 end
 
-function make_f(s::Array{ComplexF64,4}, w_list, shell_list, k_plus_b, k_minus_b, n_k, n_b, n_e, n_j)
-    r = zeros(ComplexF64, size(s))
-    rho_hat = zeros(ComplexF64, n_e, n_b)
-    omega = zeros(Float64, n_b)
-    m_work = zeros(ComplexF64, n_e, n_k, n_b)
-    OracleF(s, w_list, shell_list, k_plus_b, k_minus_b, n_k, n_b, n_e, n_j, r, rho_hat, omega, m_work, false)
-end
+as_mv(f::OracleF) = OracleMVF(f.s, f.w_list, f.shell_list, f.k_plus_b, f.k_minus_b, f.n_k, f.n_b, f.n_e, f.n_j, f.r, f.rho_hat, f.omega, f.m_work, false)
 
-function (f::OracleF)(u::Array{ComplexF64,3})
+function (f::OracleMVF)(u::Array{ComplexF64,3})
     fill!(f.rho_hat, 0)
     fill!(f.m_work, 0)
     for k in 1:f.n_k
@@ -52,14 +44,14 @@ function (f::OracleF)(u::Array{ComplexF64,3})
 
     for b in 1:f.n_b
         #= f.omega[b] = 2 * f.w_list[b] * (f.n_e - sum(real, view(f.m_work, :, b))) =#
-        f.omega[b] = 2 * f.w_list[b] * (f.n_e - sum(abs.(view(f.rho_hat, :, b))))
+        f.omega[b] = f.w_list[b] * (f.n_e - sum(abs2.(view(f.rho_hat, :, b))))
     end
 
     f.gradient_ready = true
     return sum(f.omega)
 end
 
-function peek_centers(f::OracleF)
+function peek_centers(f::OracleMVF)
     phase = dropdims(sum(f.m_work, dims=2), dims=2)
     lmul!(1 / f.n_k, phase)
     map!(angle, phase, phase)
@@ -73,7 +65,7 @@ function peek_centers(f::OracleF)
     return centers
 end
 
-function peek_spreads(f::OracleF)
+function peek_spreads(f::OracleMVF)
     spreads = zeros(Float64, f.n_e)
 
     for n in 1:f.n_e
@@ -85,16 +77,16 @@ function peek_spreads(f::OracleF)
     return spreads
 end
 
-struct OracleGradF
-    f::OracleF
+struct OracleGradMVF
+    f::OracleMVF
     grad_work::Matrix{ComplexF64}
     grad_omega::Array{ComplexF64,3}
 end
 
-function make_grad_f(f::OracleF)
+function make_grad_f(f::OracleMVF)
     grad_work = zeros(ComplexF64, f.n_e, f.n_e)
     grad_omega = zeros(ComplexF64, f.n_e, f.n_e, f.n_k)
-    return OracleGradF(f, grad_work, grad_omega)
+    return OracleGradMVF(f, grad_work, grad_omega)
 end
 
 function anti_symmetrize!(dst, src)
@@ -106,7 +98,7 @@ function anti_symmetrize!(dst, src)
     return dst
 end
 
-function (grad_f::OracleGradF)(u::Array{ComplexF64,3})
+function (grad_f::OracleGradMVF)(u::Array{ComplexF64,3})
     f = grad_f.f
     f.gradient_ready || error("the oracle was not first evaluated")
     f.gradient_ready = false
@@ -114,7 +106,7 @@ function (grad_f::OracleGradF)(u::Array{ComplexF64,3})
     fill!(grad_f.grad_omega, 0)
     map!(abs, view(f.m_work, :, 1, :), f.rho_hat)
     map!(conj, f.rho_hat, f.rho_hat)
-    map!(/, f.rho_hat, f.rho_hat, view(f.m_work, :, 1, :))
+    # map!(/, f.rho_hat, f.rho_hat, view(f.m_work, :, 1, :))
 
     for b in 1:f.n_b
         rmul!(view(f.rho_hat, :, b), f.w_list[b])
@@ -147,56 +139,4 @@ function (grad_f::OracleGradF)(u::Array{ComplexF64,3})
     end
     return grad_f.grad_omega
 end
-
-#= struct SVDRetraction end
-struct QRRetraction end
-struct ExpRetraction end =#
-
-function qr_retract!(u_buffer, u, d_u, t)
-    n_e, _, n_k = size(u)
-    copy!(u_buffer, u)
-    for k in 1:n_k
-        axpy!(t, view(d_u, :, :, k), view(u_buffer, :, :, k))
-        for p = 1:n_e
-            norm_p = norm(view(u_buffer, :, p, k))
-            lmul!(1 / norm_p, view(u_buffer, :, p, k))
-            for q = p+1:n_e
-                r = dot(view(u_buffer, :, p, k), view(u_buffer, :, q, k))
-                axpy!(-r, view(u_buffer, :, p, k), view(u_buffer, :, q, k))
-            end
-        end
-    end
-end
-
-function svd_retract!(u_buffer, u, d_u, t)
-    Nk = size(u, 3)
-    copy!(u_buffer, u)
-    axpy!(t, d_u, u_buffer)
-    for k in 1:Nk
-        U, _, V = svd(view(u_buffer, :, :, k))
-        u_buffer[:, :, k] = U * V'
-    end
-end
-
-function exp_retract!(u_buffer, u, d_u, t)
-    Nk = size(u, 3)
-
-    for k in 1:Nk
-        #= u_buffer[:, :, k] = u_tensor[:, :, k] * exp(t * Hermitian(u_tensor[:, :, k]' * p_curr[:, :, k])) =#
-        work = u[:, :, k]' * d_u[:, :, k]
-        u_buffer[:, :, k] = u[:, :, k] * exp(t * (work - work') / 2)
-    end
-end
-
-function random_gauge(f::AbstractOracleF)
-    u_init = zeros(ComplexF64, f.n_e, f.n_e, f.n_k)
-    for k in 1:f.n_k
-        a = rand(f.n_e, f.n_e)
-        u_init[:, :, k] = let (u, _, v) = svd(a)
-            u * v'
-        end
-    end
-    return u_init
-end
-
 
